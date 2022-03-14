@@ -13,7 +13,7 @@
 
 // The use of Boost's small_vector is currently forced due to the performance of
 // the pika one being significantly worse.
-#if 1    // !defined(PIKA_HAVE_CXX17_MEMORY_RESOURCE)
+#if !defined(PIKA_HAVE_CXX17_MEMORY_RESOURCE)
 
 // fall back to Boost if memory_resource is not supported
 #include <boost/container/small_vector.hpp>
