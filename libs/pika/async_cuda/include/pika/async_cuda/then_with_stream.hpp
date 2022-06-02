@@ -24,6 +24,7 @@
 #include <pika/execution_base/receiver.hpp>
 #include <pika/execution_base/sender.hpp>
 #include <pika/functional/detail/tag_fallback_invoke.hpp>
+#include <pika/functional/invoke_fused.hpp>
 #include <pika/type_support/pack.hpp>
 
 #include <exception>
@@ -268,10 +269,8 @@ namespace pika::cuda::experimental::then_with_stream_detail {
                 struct check_type;
 
                 template <typename... Ts>
-                auto set_value(Ts&&... ts) noexcept
-                    -> decltype(PIKA_INVOKE(
-                                    PIKA_MOVE(f), stream.value(), ts...),
-                        void())
+                auto set_value(Ts&&... ts) noexcept -> decltype(
+                    PIKA_INVOKE(PIKA_MOVE(f), stream.value(), ts...), void())
                 {
                     pika::detail::try_catch_exception_ptr(
                         [&]() mutable {
@@ -303,6 +302,12 @@ namespace pika::cuda::experimental::then_with_stream_detail {
                                 }
                             }
 
+                            using ts_element_type =
+                                pika::tuple<std::decay_t<Ts>...>;
+                            op_state.ts.template emplace<ts_element_type>(
+                                PIKA_FORWARD(Ts, ts)...);
+                            auto& t = pika::get<ts_element_type>(op_state.ts);
+
                             using invoke_result_type =
                                 std::decay_t<pika::util::invoke_result_t<F,
                                     cuda_stream const&,
@@ -314,8 +319,12 @@ namespace pika::cuda::experimental::then_with_stream_detail {
                             {
                                 // When the return type is void, there is no
                                 // value to forward to the receiver
-                                PIKA_INVOKE(PIKA_MOVE(op_state.f),
-                                    op_state.stream.value(), ts...);
+                                pika::util::invoke_fused(
+                                    [&](auto&... ts) mutable {
+                                        PIKA_INVOKE(PIKA_MOVE(op_state.f),
+                                            op_state.stream.value(), ts...);
+                                    },
+                                    t);
 
                                 if constexpr (is_then_with_cuda_stream_receiver<
                                                   std::decay_t<Receiver>>::
@@ -353,10 +362,14 @@ namespace pika::cuda::experimental::then_with_stream_detail {
                             {
                                 // When the return type is non-void, we have to
                                 // forward the value to the receiver
-                                op_state.result
-                                    .template emplace<invoke_result_type>(
-                                        PIKA_INVOKE(PIKA_MOVE(op_state.f),
+                                pika::util::invoke_fused(
+                                    [&](auto&... ts) mutable {
+                                        op_state.result.template emplace<
+                                            invoke_result_type>(PIKA_INVOKE(
+                                            PIKA_MOVE(op_state.f),
                                             op_state.stream.value(), ts...));
+                                    },
+                                    t);
 
                                 if constexpr (is_then_with_cuda_stream_receiver<
                                                   std::decay_t<Receiver>>::
@@ -542,8 +555,8 @@ namespace pika::cuda::experimental::then_with_stream_detail {
             noexcept(
                 noexcept(PIKA_INVOKE(f, PIKA_FORWARD(Ts, ts)..., stream.get())))
 #endif
-                -> decltype(PIKA_INVOKE(
-                    f, PIKA_FORWARD(Ts, ts)..., stream.get()))
+                -> decltype(
+                    PIKA_INVOKE(f, PIKA_FORWARD(Ts, ts)..., stream.get()))
         {
             return PIKA_INVOKE(f, PIKA_FORWARD(Ts, ts)..., stream.get());
         }

@@ -692,6 +692,7 @@ namespace pika {
 
     namespace std_adl_barrier {
 
+        PIKA_NVCC_PRAGMA_HD_WARNING_DISABLE
         template <std::size_t I, typename... Ts>
         constexpr PIKA_HOST_DEVICE PIKA_FORCEINLINE
             typename tuple_element<I, tuple<Ts...>>::type&

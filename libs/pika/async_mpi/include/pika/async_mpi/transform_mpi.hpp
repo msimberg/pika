@@ -177,34 +177,36 @@ namespace pika { namespace mpi { namespace experimental {
                                 if constexpr (std::is_void_v<
                                                   invoke_result_type>)
                                 {
+                                    // When the return type is void,
+                                    // there is no value to forward to
+                                    // the receiver
                                     pika::util::invoke_fused(
                                         [&](auto&... ts) mutable {
                                             PIKA_INVOKE(PIKA_MOVE(r.op_state.f),
                                                 ts..., &request);
-                                            // When the return type is void,
-                                            // there is no value to forward to
-                                            // the receiver
-                                            set_value_request_callback_void(
-                                                request, r.op_state);
                                         },
                                         t);
+
+                                    set_value_request_callback_void(
+                                        request, r.op_state);
                                 }
                                 else
                                 {
+                                    // When the return type is non-void,
+                                    // we have to forward the value to
+                                    // the receiver
                                     pika::util::invoke_fused(
                                         [&](auto&... ts) mutable {
                                             r.op_state.result.template emplace<
                                                 invoke_result_type>(PIKA_INVOKE(
                                                 PIKA_MOVE(r.op_state.f), ts...,
                                                 &request));
-                                            // When the return type is non-void,
-                                            // we have to forward the value to
-                                            // the receiver
-                                            set_value_request_callback_non_void<
-                                                invoke_result_type>(
-                                                request, r.op_state);
                                         },
                                         t);
+
+                                    set_value_request_callback_non_void<
+                                        invoke_result_type>(
+                                        request, r.op_state);
                                 }
                             },
                             [&](std::exception_ptr ep) {

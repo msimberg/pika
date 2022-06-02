@@ -53,6 +53,7 @@ namespace pika { namespace util {
         };
 
         ///////////////////////////////////////////////////////////////////////
+        PIKA_NVCC_PRAGMA_HD_WARNING_DISABLE
         template <std::size_t... Is, typename F, typename Tuple>
         constexpr PIKA_HOST_DEVICE PIKA_FORCEINLINE
             typename invoke_fused_result<F, Tuple>::type
