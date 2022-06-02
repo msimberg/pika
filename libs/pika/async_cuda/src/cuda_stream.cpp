@@ -33,13 +33,12 @@ namespace pika::cuda::experimental {
         cudaStream_t stream;
         if (priority <= pika::threads::thread_priority::normal)
         {
-            check_cuda_error(cudaStreamCreateWithPriority(
-                &stream, cudaStreamNonBlocking, p.least));
+            check_cuda_error(cudaStreamCreateWithPriority(&stream, 0, p.least));
         }
         else
         {
-            check_cuda_error(cudaStreamCreateWithPriority(
-                &stream, cudaStreamNonBlocking, p.greatest));
+            check_cuda_error(
+                cudaStreamCreateWithPriority(&stream, 0, p.greatest));
         }
 
         return stream;
