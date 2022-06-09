@@ -713,6 +713,17 @@ if(PIKA_WITH_SCHEDULER_LOCAL_STORAGE)
 endif()
 
 pika_option(
+  PIKA_WITH_SCHEDULER_THREAD_MAP BOOL
+  "Enable a thread map in schedulers to keep track of all pika threads (default: ON)" ON
+  CATEGORY "Thread Manager"
+  ADVANCED
+)
+
+if(PIKA_WITH_SCHEDULER_THREAD_MAP)
+  pika_add_config_define(PIKA_HAVE_SCHEDULER_THREAD_MAP)
+endif()
+
+pika_option(
   PIKA_WITH_SPINLOCK_POOL_NUM STRING
   "Number of elements a spinlock pool manages (default: 128)" 128
   CATEGORY "Thread Manager"
