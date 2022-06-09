@@ -111,7 +111,7 @@ namespace pika { namespace threads { namespace policies {
             threads::detail::thread_id_ref_type data;
             std::uint64_t waittime;
         };
-        using thread_description_ptr = thread_description*;
+        using thread_description_ptr = thread_description;
 #else
         using thread_description_ptr =
             typename threads::detail::thread_id_ref_type::thread_repr*;
@@ -121,7 +121,7 @@ namespace pika { namespace threads { namespace policies {
             pika::concurrency::detail::ConcurrentQueue<thread_description_ptr>;
 
         using task_items_type =
-            pika::concurrency::detail::ConcurrentQueue<task_description*>;
+            pika::concurrency::detail::ConcurrentQueue<task_description>;
 
         using terminated_items_type =
             pika::concurrency::detail::ConcurrentQueue<threads::detail::thread_data*>;
@@ -217,7 +217,7 @@ namespace pika { namespace threads { namespace policies {
                 return 0;
 
             std::size_t added = 0;
-            task_description* task = nullptr;
+            task_description task;
             while (add_count-- && addfrom->new_tasks_.try_dequeue(task))
             {
 #ifdef PIKA_HAVE_THREAD_QUEUE_WAITTIME
@@ -230,7 +230,7 @@ namespace pika { namespace threads { namespace policies {
                 }
 #endif
                 // create the new thread
-                threads::detail::thread_init_data& data = task->data;
+                threads::detail::thread_init_data& data = task.data;
 
                 bool schedule_now = data.initial_state ==
                     threads::detail::thread_schedule_state::pending;
@@ -238,9 +238,6 @@ namespace pika { namespace threads { namespace policies {
 
                 threads::detail::thread_id_ref_type thrd;
                 create_thread_object(thrd, data, lk);
-
-                task->~task_description();
-                task_description_alloc_.deallocate(task, 1);
 
                 // add the new entry to the map of all threads
                 std::pair<thread_map_type::iterator, bool> p =
@@ -749,14 +746,13 @@ namespace pika { namespace threads { namespace policies {
             // later thread creation
             ++new_tasks_count_.data_;
 
-            task_description* td = task_description_alloc_.allocate(1);
+            task_description td{
+                PIKA_MOVE(data),
 #ifdef PIKA_HAVE_THREAD_QUEUE_WAITTIME
-            new (td) task_description{
-                PIKA_MOVE(data), pika::chrono::high_resolution_clock::now()};
-#else
-            new (td) task_description{PIKA_MOVE(data)};    //-V106
+                pika::chrono::high_resolution_clock::now(),
 #endif
-            new_tasks_.enqueue(td);
+            };
+            new_tasks_.enqueue(PIKA_MOVE(td));
             if (&ec != &throws)
                 ec = make_success_code();
         }
@@ -788,7 +784,7 @@ namespace pika { namespace threads { namespace policies {
 
         void move_task_items_from(thread_queue* src, std::int64_t count)
         {
-            task_description* task = nullptr;
+            task_description task;
             while (src->new_tasks_.try_dequeue(task))
             {
 #ifdef PIKA_HAVE_THREAD_QUEUE_WAITTIME
@@ -871,9 +867,8 @@ namespace pika { namespace threads { namespace policies {
         {
             ++work_items_count_.data_;
 #ifdef PIKA_HAVE_THREAD_QUEUE_WAITTIME
-            work_items_.enqueue(new thread_description{PIKA_MOVE(thrd),
-                                    pika::chrono::high_resolution_clock::now()},
-                other_end);
+            work_items_.enqueue(thread_description{
+                PIKA_MOVE(thrd), pika::chrono::high_resolution_clock::now()});
 #else
             // detach the thread from the id_ref without decrementing
             // the reference count
