@@ -47,38 +47,6 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 namespace pika { namespace threads { namespace policies {
-    ///////////////////////////////////////////////////////////////////////////
-    // // Queue back-end interface:
-    //
-    // template <typename T>
-    // struct queue_backend
-    // {
-    //     using container_type = ...;
-    //     using value_type = ...;
-    //     using reference = ...;
-    //     using const_reference = ...;
-    //     using size_type = ...;
-    //
-    //     queue_backend(
-    //         size_type initial_size = ...
-    //       , size_type num_thread = ...
-    //         );
-    //
-    //     bool push(const_reference val);
-    //
-    //     bool pop(reference val, bool steal = true);
-    //
-    //     bool empty();
-    // };
-    //
-    // struct queue_policy
-    // {
-    //     template <typename T>
-    //     struct apply
-    //     {
-    //         using type = ...;
-    //     };
-    // };
     template <typename Mutex, typename PendingQueuing, typename StagedQueuing,
         typename TerminatedQueuing>
     class thread_queue
@@ -124,7 +92,8 @@ namespace pika { namespace threads { namespace policies {
             pika::concurrency::detail::ConcurrentQueue<task_description>;
 
         using terminated_items_type =
-            pika::concurrency::detail::ConcurrentQueue<threads::detail::thread_data*>;
+            pika::concurrency::detail::ConcurrentQueue<
+                threads::detail::thread_data*>;
 
     protected:
         template <typename Lock>
@@ -217,55 +186,73 @@ namespace pika { namespace threads { namespace policies {
                 return 0;
 
             std::size_t added = 0;
-            task_description task;
-            while (add_count-- && addfrom->new_tasks_.try_dequeue(task))
+
+            while (add_count > 0)
             {
+                constexpr std::size_t batch_size = 100;
+                std::array<task_description, batch_size> tasks;
+
+                std::size_t added_batch = addfrom->new_tasks_.try_dequeue_bulk(
+                    std::begin(tasks), batch_size);
+
+                if (added_batch == 0)
+                {
+                    break;
+                }
+
+                add_count -= added_batch;
+
+                for (std::size_t i = 0; i < added_batch; ++i)
+                {
+                    task_description& task = tasks[i];
+
 #ifdef PIKA_HAVE_THREAD_QUEUE_WAITTIME
-                if (get_maintain_queue_wait_times_enabled())
-                {
-                    addfrom->new_tasks_wait_ +=
-                        pika::chrono::high_resolution_clock::now() -
-                        task->waittime;
-                    ++addfrom->new_tasks_wait_count_;
-                }
+                    if (get_maintain_queue_wait_times_enabled())
+                    {
+                        addfrom->new_tasks_wait_ +=
+                            pika::chrono::high_resolution_clock::now() -
+                            task->waittime;
+                        ++addfrom->new_tasks_wait_count_;
+                    }
 #endif
-                // create the new thread
-                threads::detail::thread_init_data& data = task.data;
+                    // create the new thread
+                    threads::detail::thread_init_data& data = task.data;
 
-                bool schedule_now = data.initial_state ==
-                    threads::detail::thread_schedule_state::pending;
-                (void) schedule_now;
+                    bool schedule_now = data.initial_state ==
+                        threads::detail::thread_schedule_state::pending;
+                    PIKA_UNUSED(schedule_now);
 
-                threads::detail::thread_id_ref_type thrd;
-                create_thread_object(thrd, data, lk);
+                    threads::detail::thread_id_ref_type thrd;
+                    create_thread_object(thrd, data, lk);
 
-                // add the new entry to the map of all threads
-                std::pair<thread_map_type::iterator, bool> p =
-                    thread_map_.insert(thrd.noref());
+                    // add the new entry to the map of all threads
+                    std::pair<thread_map_type::iterator, bool> p =
+                        thread_map_.insert(thrd.noref());
 
-                if (PIKA_UNLIKELY(!p.second))
-                {
+                    if (PIKA_UNLIKELY(!p.second))
+                    {
+                        --addfrom->new_tasks_count_.data_;
+                        lk.unlock();
+                        PIKA_THROW_EXCEPTION(pika::out_of_memory,
+                            "thread_queue::add_new",
+                            "Couldn't add new thread to the thread map");
+                        return 0;
+                    }
+
+                    ++thread_map_count_;
+
+                    // Decrement only after thread_map_count_ has been incremented
                     --addfrom->new_tasks_count_.data_;
-                    lk.unlock();
-                    PIKA_THROW_EXCEPTION(pika::out_of_memory,
-                        "thread_queue::add_new",
-                        "Couldn't add new thread to the thread map");
-                    return 0;
+
+                    // insert the thread into the work-items queue assuming it is
+                    // in pending state, thread would go out of scope otherwise
+                    PIKA_ASSERT(schedule_now);
+
+                    // pushing the new thread into the pending queue of the
+                    // specified thread_queue
+                    ++added;
+                    schedule_thread(PIKA_MOVE(thrd));
                 }
-
-                ++thread_map_count_;
-
-                // Decrement only after thread_map_count_ has been incremented
-                --addfrom->new_tasks_count_.data_;
-
-                // insert the thread into the work-items queue assuming it is
-                // in pending state, thread would go out of scope otherwise
-                PIKA_ASSERT(schedule_now);
-
-                // pushing the new thread into the pending queue of the
-                // specified thread_queue
-                ++added;
-                schedule_thread(PIKA_MOVE(thrd));
             }
 
             if (added)
@@ -373,23 +360,31 @@ namespace pika { namespace threads { namespace policies {
             if (terminated_items_count_.load(std::memory_order_acquire) == 0)
                 return true;
 
+            constexpr std::size_t batch_size = 10;
+            std::array<threads::detail::thread_data*, batch_size> todeletes;
+
             if (delete_all)
             {
                 // delete all threads
-                threads::detail::thread_data* todelete;
-                while (terminated_items_.try_dequeue(todelete))
+                while (
+                    std::size_t dequeued = terminated_items_.try_dequeue_bulk(
+                        std::begin(todeletes), batch_size))
                 {
-                    threads::detail::thread_id_type tid(todelete);
-                    --terminated_items_count_;
-
-                    // this thread has to be in this map
-                    PIKA_ASSERT(thread_map_.find(tid) != thread_map_.end());
-
-                    if (thread_map_.erase(tid) != 0)
+                    for (std::size_t i = 0; i < dequeued; ++i)
                     {
-                        recycle_thread(tid);
-                        --thread_map_count_;
-                        PIKA_ASSERT(thread_map_count_ >= 0);
+                        threads::detail::thread_data* todelete = todeletes[i];
+                        threads::detail::thread_id_type tid(todelete);
+                        --terminated_items_count_;
+
+                        // this thread has to be in this map
+                        PIKA_ASSERT(thread_map_.find(tid) != thread_map_.end());
+
+                        if (thread_map_.erase(tid) != 0)
+                        {
+                            recycle_thread(tid);
+                            --thread_map_count_;
+                            PIKA_ASSERT(thread_map_count_ >= 0);
+                        }
                     }
                 }
             }
@@ -404,23 +399,35 @@ namespace pika { namespace threads { namespace policies {
                 delete_count = (std::max)(delete_count,
                     static_cast<std::int64_t>(parameters_.min_delete_count_));
 
-                threads::detail::thread_data* todelete;
-                while (delete_count && terminated_items_.try_dequeue(todelete))
+                while (delete_count)
                 {
-                    threads::detail::thread_id_type tid(todelete);
-                    --terminated_items_count_;
-
-                    // this thread has to be in this map, except if it has changed
-                    // its priority, then it could be elsewhere
-                    PIKA_ASSERT(thread_map_.find(tid) != thread_map_.end());
-
-                    if (thread_map_.erase(tid) != 0)
+                    std::size_t dequeued = terminated_items_.try_dequeue_bulk(
+                        std::begin(todeletes),
+                        (std::min)(delete_count,
+                            static_cast<std::int64_t>(batch_size)));
+                    if (dequeued == 0)
                     {
-                        recycle_thread(tid);
-                        --thread_map_count_;
-                        PIKA_ASSERT(thread_map_count_ >= 0);
+                        break;
                     }
-                    --delete_count;
+
+                    for (std::size_t i = 0; i < dequeued; ++i)
+                    {
+                        threads::detail::thread_data* todelete = todeletes[i];
+                        threads::detail::thread_id_type tid(todelete);
+                        --terminated_items_count_;
+
+                        // this thread has to be in this map, except if it has changed
+                        // its priority, then it could be elsewhere
+                        PIKA_ASSERT(thread_map_.find(tid) != thread_map_.end());
+
+                        if (thread_map_.erase(tid) != 0)
+                        {
+                            recycle_thread(tid);
+                            --thread_map_count_;
+                            PIKA_ASSERT(thread_map_count_ >= 0);
+                        }
+                        --delete_count;
+                    }
                 }
             }
             return terminated_items_count_.load(std::memory_order_acquire) == 0;
@@ -695,7 +702,8 @@ namespace pika { namespace threads { namespace policies {
                         lk.unlock();
                         PIKA_THROWS_IF(ec, pika::out_of_memory,
                             "thread_queue::create_thread",
-                            "Couldn't add new thread to the map of threads");
+                            "Couldn't add new thread to the map of "
+                            "threads");
                         return;
                     }
                     ++thread_map_count_;
@@ -739,7 +747,8 @@ namespace pika { namespace threads { namespace policies {
             {
                 PIKA_THROW_EXCEPTION(bad_parameter,
                     "thread_queue::create_thread",
-                    "staged tasks must have 'pending' as their initial state");
+                    "staged tasks must have 'pending' as their initial "
+                    "state");
             }
 
             // do not execute the work, but register a task description for
@@ -755,65 +764,6 @@ namespace pika { namespace threads { namespace policies {
             new_tasks_.enqueue(PIKA_MOVE(td));
             if (&ec != &throws)
                 ec = make_success_code();
-        }
-
-        void move_work_items_from(thread_queue* src, std::int64_t count)
-        {
-            thread_description_ptr trd;
-            while (src->work_items_.try_dequeue(trd))
-            {
-                --src->work_items_count_.data_;
-
-#ifdef PIKA_HAVE_THREAD_QUEUE_WAITTIME
-                if (get_maintain_queue_wait_times_enabled())
-                {
-                    std::uint64_t now =
-                        pika::chrono::high_resolution_clock::now();
-                    src->work_items_wait_ += now - trd->waittime;
-                    ++src->work_items_wait_count_;
-                    trd->waittime = now;
-                }
-#endif
-
-                bool finished = count == ++work_items_count_.data_;
-                work_items_.enqueue(trd);
-                if (finished)
-                    break;
-            }
-        }
-
-        void move_task_items_from(thread_queue* src, std::int64_t count)
-        {
-            task_description task;
-            while (src->new_tasks_.try_dequeue(task))
-            {
-#ifdef PIKA_HAVE_THREAD_QUEUE_WAITTIME
-                if (get_maintain_queue_wait_times_enabled())
-                {
-                    std::int64_t now =
-                        pika::chrono::high_resolution_clock::now();
-                    src->new_tasks_wait_ += now - task->waittime;
-                    ++src->new_tasks_wait_count_;
-                    task->waittime = now;
-                }
-#endif
-
-                bool finish = count == ++new_tasks_count_.data_;
-
-                // Decrement only after the local new_tasks_count_ has
-                // been incremented
-                --src->new_tasks_count_.data_;
-
-                if (new_tasks_.enqueue(task))
-                {
-                    if (finish)
-                        break;
-                }
-                else
-                {
-                    --new_tasks_count_.data_;
-                }
-            }
         }
 
         /// Return the next thread to be executed, return false if none is
@@ -862,8 +812,8 @@ namespace pika { namespace threads { namespace policies {
         }
 
         /// Schedule the passed thread
-        void schedule_thread(
-            threads::detail::thread_id_ref_type thrd, bool /* other_end */ = false)
+        void schedule_thread(threads::detail::thread_id_ref_type thrd,
+            bool /* other_end */ = false)
         {
             ++work_items_count_.data_;
 #ifdef PIKA_HAVE_THREAD_QUEUE_WAITTIME
@@ -1052,10 +1002,11 @@ namespace pika { namespace threads { namespace policies {
                 {
                     if (new_tasks_count != 0)
                     {
-                        LTM_(debug).format(
-                            "thread_queue::wait_or_add_new: not enough threads "
-                            "to steal from queue {} to queue {}, have {} but "
-                            "need at least {}",
+                        LTM_(debug).format("thread_queue::wait_or_add_"
+                                           "new: not enough threads "
+                                           "to steal from queue {} to "
+                                           "queue {}, have {} but "
+                                           "need at least {}",
                             addfrom, this, new_tasks_count,
                             parameters_.min_tasks_to_steal_staged_);
                     }
