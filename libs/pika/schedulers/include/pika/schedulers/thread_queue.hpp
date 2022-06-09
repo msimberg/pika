@@ -117,15 +117,14 @@ namespace pika { namespace threads { namespace policies {
             typename threads::detail::thread_id_ref_type::thread_repr*;
 #endif
 
-        using work_items_type = typename PendingQueuing::template apply<
-            thread_description_ptr>::type;
+        using work_items_type =
+            pika::concurrency::detail::ConcurrentQueue<thread_description_ptr>;
 
         using task_items_type =
-            typename StagedQueuing::template apply<task_description*>::type;
+            pika::concurrency::detail::ConcurrentQueue<task_description*>;
 
         using terminated_items_type =
-            typename TerminatedQueuing::template apply<
-                threads::detail::thread_data*>::type;
+            pika::concurrency::detail::ConcurrentQueue<threads::detail::thread_data*>;
 
     protected:
         template <typename Lock>
@@ -210,7 +209,7 @@ namespace pika { namespace threads { namespace policies {
         ///////////////////////////////////////////////////////////////////////
         // add new threads if there is some amount of work available
         std::size_t add_new(std::int64_t add_count, thread_queue* addfrom,
-            std::unique_lock<mutex_type>& lk, bool steal = false)
+            std::unique_lock<mutex_type>& lk, bool /* steal */ = false)
         {
             PIKA_ASSERT(lk.owns_lock());
 
@@ -219,7 +218,7 @@ namespace pika { namespace threads { namespace policies {
 
             std::size_t added = 0;
             task_description* task = nullptr;
-            while (add_count-- && addfrom->new_tasks_.pop(task, steal))
+            while (add_count-- && addfrom->new_tasks_.try_dequeue(task))
             {
 #ifdef PIKA_HAVE_THREAD_QUEUE_WAITTIME
                 if (get_maintain_queue_wait_times_enabled())
@@ -310,7 +309,7 @@ namespace pika { namespace threads { namespace policies {
                     if (add_count > parameters_.max_add_new_count_)
                         add_count = parameters_.max_add_new_count_;
                 }
-                else if (work_items_.empty())
+                else if (work_items_.size_approx() == 0)
                 {
                     // add this number of threads
                     add_count = parameters_.min_add_new_count_;
@@ -381,7 +380,7 @@ namespace pika { namespace threads { namespace policies {
             {
                 // delete all threads
                 threads::detail::thread_data* todelete;
-                while (terminated_items_.pop(todelete))
+                while (terminated_items_.try_dequeue(todelete))
                 {
                     threads::detail::thread_id_type tid(todelete);
                     --terminated_items_count_;
@@ -409,7 +408,7 @@ namespace pika { namespace threads { namespace policies {
                     static_cast<std::int64_t>(parameters_.min_delete_count_));
 
                 threads::detail::thread_data* todelete;
-                while (delete_count && terminated_items_.pop(todelete))
+                while (delete_count && terminated_items_.try_dequeue(todelete))
                 {
                     threads::detail::thread_id_type tid(todelete);
                     --terminated_items_count_;
@@ -454,11 +453,11 @@ namespace pika { namespace threads { namespace policies {
             return cleanup_terminated_locked(false);
         }
 
-        thread_queue(std::size_t queue_num = std::size_t(-1),
+        thread_queue(std::size_t /* queue_num */ = std::size_t(-1),
             thread_queue_init_parameters parameters = {})
           : parameters_(parameters)
           , thread_map_count_(0)
-          , work_items_(128, queue_num)
+          , work_items_(128)
 #ifdef PIKA_HAVE_THREAD_QUEUE_WAITTIME
           , work_items_wait_(0)
           , work_items_wait_count_(0)
@@ -490,6 +489,12 @@ namespace pika { namespace threads { namespace policies {
         {
             new_tasks_count_.data_ = 0;
             work_items_count_.data_ = 0;
+
+            thread_heap_small_.reserve(128);
+            thread_heap_medium_.reserve(128);
+            thread_heap_large_.reserve(128);
+            thread_heap_huge_.reserve(128);
+            thread_heap_nostack_.reserve(128);
         }
 
         static void deallocate(threads::detail::thread_data* p)
@@ -751,7 +756,7 @@ namespace pika { namespace threads { namespace policies {
 #else
             new (td) task_description{PIKA_MOVE(data)};    //-V106
 #endif
-            new_tasks_.push(td);
+            new_tasks_.enqueue(td);
             if (&ec != &throws)
                 ec = make_success_code();
         }
@@ -759,7 +764,7 @@ namespace pika { namespace threads { namespace policies {
         void move_work_items_from(thread_queue* src, std::int64_t count)
         {
             thread_description_ptr trd;
-            while (src->work_items_.pop(trd))
+            while (src->work_items_.try_dequeue(trd))
             {
                 --src->work_items_count_.data_;
 
@@ -775,7 +780,7 @@ namespace pika { namespace threads { namespace policies {
 #endif
 
                 bool finished = count == ++work_items_count_.data_;
-                work_items_.push(trd);
+                work_items_.enqueue(trd);
                 if (finished)
                     break;
             }
@@ -784,7 +789,7 @@ namespace pika { namespace threads { namespace policies {
         void move_task_items_from(thread_queue* src, std::int64_t count)
         {
             task_description* task = nullptr;
-            while (src->new_tasks_.pop(task))
+            while (src->new_tasks_.try_dequeue(task))
             {
 #ifdef PIKA_HAVE_THREAD_QUEUE_WAITTIME
                 if (get_maintain_queue_wait_times_enabled())
@@ -803,7 +808,7 @@ namespace pika { namespace threads { namespace policies {
                 // been incremented
                 --src->new_tasks_count_.data_;
 
-                if (new_tasks_.push(task))
+                if (new_tasks_.enqueue(task))
                 {
                     if (finish)
                         break;
@@ -818,7 +823,7 @@ namespace pika { namespace threads { namespace policies {
         /// Return the next thread to be executed, return false if none is
         /// available
         bool get_next_thread(threads::detail::thread_id_ref_type& thrd,
-            bool allow_stealing = false, bool steal = false) PIKA_HOT
+            bool allow_stealing = false, bool /* steal */ = false) PIKA_HOT
         {
             std::int64_t work_items_count =
                 work_items_count_.data_.load(std::memory_order_relaxed);
@@ -831,7 +836,7 @@ namespace pika { namespace threads { namespace policies {
 
 #ifdef PIKA_HAVE_THREAD_QUEUE_WAITTIME
             thread_description_ptr tdesc;
-            if (0 != work_items_count && work_items_.pop(tdesc, steal))
+            if (0 != work_items_count && work_items_.try_dequeue(tdesc))
             {
                 --work_items_count_.data_;
 
@@ -850,7 +855,7 @@ namespace pika { namespace threads { namespace policies {
             }
 #else
             thread_description_ptr next_thrd;
-            if (0 != work_items_count && work_items_.pop(next_thrd, steal))
+            if (0 != work_items_count && work_items_.try_dequeue(next_thrd))
             {
                 thrd.reset(next_thrd, false);    // do not addref!
                 --work_items_count_.data_;
@@ -862,17 +867,17 @@ namespace pika { namespace threads { namespace policies {
 
         /// Schedule the passed thread
         void schedule_thread(
-            threads::detail::thread_id_ref_type thrd, bool other_end = false)
+            threads::detail::thread_id_ref_type thrd, bool /* other_end */ = false)
         {
             ++work_items_count_.data_;
 #ifdef PIKA_HAVE_THREAD_QUEUE_WAITTIME
-            work_items_.push(new thread_description{PIKA_MOVE(thrd),
-                                 pika::chrono::high_resolution_clock::now()},
+            work_items_.enqueue(new thread_description{PIKA_MOVE(thrd),
+                                    pika::chrono::high_resolution_clock::now()},
                 other_end);
 #else
             // detach the thread from the id_ref without decrementing
             // the reference count
-            work_items_.push(thrd.detach(), other_end);
+            work_items_.enqueue(thrd.detach());
 #endif
         }
 
@@ -881,7 +886,7 @@ namespace pika { namespace threads { namespace policies {
         {
             PIKA_ASSERT(&thrd->get_queue<thread_queue>() == this);
 
-            terminated_items_.push(thrd);
+            terminated_items_.enqueue(thrd);
 
             std::int64_t count = ++terminated_items_count_;
             if (count > parameters_.max_terminated_threads_)
