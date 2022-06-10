@@ -23,7 +23,6 @@
 #include <iosfwd>
 #include <string>
 #include <utility>
-#include <vector>
 
 namespace pika { namespace mpi { namespace experimental {
 
@@ -48,10 +47,11 @@ namespace pika { namespace mpi { namespace experimental {
 
         using mutex_type = pika::lcos::local::spinlock;
 
-        // mutex needed to protect mpi request vector, note that the
-        // mpi poll function takes place inside the main scheduling loop
-        // of pika and not on an pika worker thread, so we must use std:mutex
-        PIKA_EXPORT mutex_type& get_vector_mtx();
+        // Mutex is used to serialize polling; only one worker thread does
+        // polling at a time. Note that the mpi poll function takes place inside
+        // the main scheduling loop of pika and not on an pika worker thread, so
+        // we must use std:mutex.
+        PIKA_EXPORT mutex_type& get_mtx();
 
         // -----------------------------------------------------------------
         // An implementation of future_data for MPI
@@ -116,11 +116,7 @@ namespace pika { namespace mpi { namespace experimental {
             bool error_handler_initialized_ = false;
             int rank_ = -1;
             int size_ = -1;
-            // requests vector holds the requests that are checked; this
-            // represents the number of active requests in the vector, not the
-            // size of the vector
-            std::atomic<std::uint32_t> active_requests_vector_size_{0};
-            // requests queue holds the requests recently added
+            // requests queue holds requests
             std::atomic<std::uint32_t> requests_queue_size_{0};
         };
 
@@ -140,18 +136,9 @@ namespace pika { namespace mpi { namespace experimental {
         PIKA_EXPORT void pika_MPI_Handler(MPI_Comm*, int* errorcode, ...);
 
         // -----------------------------------------------------------------
-        // we track requests and callbacks in two vectors even though
-        // we have the request stored in the request_callback vector already
-        // the reason for this is because we can use MPI_Testany
-        // with a vector of requests to save overheads compared
-        // to testing one by one every item (using a list)
-        PIKA_EXPORT std::vector<MPI_Request>& get_requests_vector();
-
-        // -----------------------------------------------------------------
         // define a lockfree queue type to place requests in prior to handling
         // this is done only to avoid taking a lock every time a request is
         // returned from MPI. Instead the requests are placed into a queue
-        // and the polling code pops them prior to calling Testany
         using queue_type =
             concurrency::detail::ConcurrentQueue<future_data_ptr>;
 
@@ -203,34 +190,20 @@ namespace pika { namespace mpi { namespace experimental {
     PIKA_EXPORT pika::threads::policies::detail::polling_status poll();
 
     // -----------------------------------------------------------------
-    // This is not completely safe as it will return when the request vector is
-    // empty, but cannot guarantee that other communications are not about
-    // to be launched in outstanding continuations etc.
+    // This is not completely safe as it will return when the request queue is
+    // empty, but cannot guarantee that other communications are not about to be
+    // launched in outstanding continuations etc.
     inline void wait()
     {
-        pika::util::yield_while([]() {
-            std::unique_lock<detail::mutex_type> lk(
-                detail::get_vector_mtx(), std::try_to_lock);
-            if (!lk.owns_lock())
-            {
-                return true;
-            }
-            return (detail::get_mpi_info().active_requests_vector_size_ > 0);
-        });
+        pika::util::yield_while(
+            []() { return detail::get_mpi_info().requests_queue_size_ > 0; });
     }
 
     template <typename F>
     inline void wait(F&& f)
     {
         pika::util::yield_while([&]() {
-            std::unique_lock<detail::mutex_type> lk(
-                detail::get_vector_mtx(), std::try_to_lock);
-            if (!lk.owns_lock())
-            {
-                return true;
-            }
-            return (detail::get_mpi_info().active_requests_vector_size_ > 0) ||
-                f();
+            return detail::get_mpi_info().requests_queue_size_ > 0 || f();
         });
     }
 
