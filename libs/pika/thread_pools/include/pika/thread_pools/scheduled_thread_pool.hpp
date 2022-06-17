@@ -13,6 +13,11 @@
 #include <pika/concurrency/barrier.hpp>
 #include <pika/functional/function.hpp>
 #include <pika/modules/errors.hpp>
+#include <pika/schedulers/local_priority_queue_scheduler.hpp>
+#include <pika/schedulers/local_queue_scheduler.hpp>
+#include <pika/schedulers/shared_priority_queue_scheduler.hpp>
+#include <pika/schedulers/static_priority_queue_scheduler.hpp>
+#include <pika/schedulers/static_queue_scheduler.hpp>
 #include <pika/thread_pools/scheduling_loop.hpp>
 #include <pika/threading_base/callback_notifier.hpp>
 #include <pika/threading_base/network_background_callback.hpp>
@@ -397,6 +402,18 @@ namespace pika::threads::detail {
     };
 }    // namespace pika::threads::detail
 
-// TODO: extern instantiated thread pools
+extern template class pika::threads::detail::scheduled_thread_pool<
+    pika::threads::policies::local_queue_scheduler>;
+extern template class pika::threads::detail::scheduled_thread_pool<
+    pika::threads::policies::static_queue_scheduler>;
+extern template class pika::threads::detail::scheduled_thread_pool<
+    pika::threads::policies::local_priority_queue_scheduler>;
+extern template class pika::threads::detail::scheduled_thread_pool<
+    pika::threads::policies::static_priority_queue_scheduler>;
+
+extern template class pika::threads::policies::
+    shared_priority_queue_scheduler<>;
+extern template class pika::threads::detail::scheduled_thread_pool<
+    pika::threads::policies::shared_priority_queue_scheduler<>>;
 
 #include <pika/config/warnings_suffix.hpp>

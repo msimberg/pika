@@ -13,7 +13,6 @@
 #include <pika/thread_pools/scheduled_thread_pool.hpp>
 #include <pika/thread_pools/scheduled_thread_pool_impl.hpp>
 
-/// explicit template instantiation for the thread pools of our choice
 template class PIKA_EXPORT pika::threads::detail::scheduled_thread_pool<
     pika::threads::policies::local_queue_scheduler>;
 template class PIKA_EXPORT pika::threads::detail::scheduled_thread_pool<

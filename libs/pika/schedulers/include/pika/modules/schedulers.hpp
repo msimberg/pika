@@ -7,7 +7,6 @@
 #pragma once
 
 #include <pika/config.hpp>
-
 #include <pika/schedulers/local_priority_queue_scheduler.hpp>
 #include <pika/schedulers/local_queue_scheduler.hpp>
 #include <pika/schedulers/shared_priority_queue_scheduler.hpp>
