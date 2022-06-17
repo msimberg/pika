@@ -21,18 +21,7 @@
 
 #include <pika/config/warnings_prefix.hpp>
 
-///////////////////////////////////////////////////////////////////////////////
-namespace pika { namespace threads { namespace policies {
-    ///////////////////////////////////////////////////////////////////////////
-#if defined(PIKA_HAVE_CXX11_STD_ATOMIC_128BIT)
-    using default_static_priority_queue_scheduler_terminated_queue =
-        lockfree_lifo;
-#else
-    using default_static_priority_queue_scheduler_terminated_queue =
-        lockfree_fifo;
-#endif
-
-    ///////////////////////////////////////////////////////////////////////////
+namespace pika::threads::policies {
     /// The static_priority_queue_scheduler maintains exactly one queue of work
     /// items (threads) per OS thread, where this OS thread pulls its next work
     /// from. Additionally it maintains separate queues: several for high
@@ -41,19 +30,11 @@ namespace pika { namespace threads { namespace policies {
     /// other work is executed. Low priority threads are executed by the last
     /// OS thread whenever no other work is available.
     /// This scheduler does not do any work stealing.
-    template <typename Mutex = std::mutex,
-        typename PendingQueuing = lockfree_fifo,
-        typename StagedQueuing = lockfree_fifo,
-        typename TerminatedQueuing =
-            default_static_priority_queue_scheduler_terminated_queue>
     class PIKA_EXPORT static_priority_queue_scheduler
-      : public local_priority_queue_scheduler<Mutex, PendingQueuing,
-            StagedQueuing, TerminatedQueuing>
+      : public local_priority_queue_scheduler
     {
     public:
-        using base_type = local_priority_queue_scheduler<Mutex, PendingQueuing,
-            StagedQueuing, TerminatedQueuing>;
-
+        using base_type = local_priority_queue_scheduler;
         using init_parameter_type = typename base_type::init_parameter_type;
 
         static_priority_queue_scheduler(init_parameter_type const& init,
@@ -78,6 +59,6 @@ namespace pika { namespace threads { namespace policies {
             return "static_priority_queue_scheduler";
         }
     };
-}}}    // namespace pika::threads::policies
+}    // namespace pika::threads::policies
 
 #include <pika/config/warnings_suffix.hpp>

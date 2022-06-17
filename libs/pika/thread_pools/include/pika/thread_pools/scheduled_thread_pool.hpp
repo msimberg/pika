@@ -397,4 +397,6 @@ namespace pika::threads::detail {
     };
 }    // namespace pika::threads::detail
 
+// TODO: extern instantiated thread pools
+
 #include <pika/config/warnings_suffix.hpp>

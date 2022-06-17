@@ -45,15 +45,11 @@
 #include <utility>
 #include <vector>
 
-///////////////////////////////////////////////////////////////////////////////
-namespace pika { namespace threads { namespace policies {
-    template <typename Mutex, typename PendingQueuing, typename StagedQueuing,
-        typename TerminatedQueuing>
+namespace pika::threads::policies {
     class thread_queue
     {
     private:
-        // we use a simple mutex to protect the data members for now
-        using mutex_type = Mutex;
+        using mutex_type = std::mutex;
 
 #if defined(PIKA_HAVE_SCHEDULER_THREAD_MAP)
         // this is the type of a map holding all threads (except depleted ones)
@@ -173,9 +169,6 @@ namespace pika { namespace threads { namespace policies {
                     p, threads::detail::thread_id_addref::no);
             }
         }
-
-        static pika::detail::internal_allocator<task_description>
-            task_description_alloc_;
 
         ///////////////////////////////////////////////////////////////////////
         // add new threads if there is some amount of work available
@@ -892,15 +885,17 @@ namespace pika { namespace threads { namespace policies {
             // All created threads are in thread_map_count_ but suspended and
             // currently running threads are missing from work_items_count_. We
             // estimate suspended threads by the difference so the count may be
-            // off by one. 
-            if (thread_schedule_state::suspended == state) {
+            // off by one.
+            if (thread_schedule_state::suspended == state)
+            {
                 return thread_map_count_ - work_items_count_.data_;
             }
 
             PIKA_THROW_EXCEPTION(bad_parameter,
                 "thread_queue::get_thread_count",
                 "PIKA_HAVE_SCHEDULER_THREAD_MAP is disabled, can't get thread "
-                "count for given state {}", state);    // TODO: Format given state into error string
+                "count for given state {}",
+                state);    // TODO: Format given state into error string
 
             return std::size_t(-1);
 #endif
@@ -1113,20 +1108,21 @@ namespace pika { namespace threads { namespace policies {
         bool dump_suspended_threads(
             std::size_t num_thread, std::int64_t& idle_loop_count, bool running)
         {
-            // #if !defined(PIKA_HAVE_THREAD_MINIMAL_DEADLOCK_DETECTION)
-            //             PIKA_UNUSED(num_thread);
-            //             PIKA_UNUSED(idle_loop_count);
-            //             PIKA_UNUSED(running);
-            //             return false;
-            // #else
-            //             if (get_minimal_deadlock_detection_enabled())
-            //             {
-            //                 std::lock_guard<mutex_type> lk(mtx_);
-            //                 return detail::dump_suspended_threads(
-            //                     num_thread, thread_map_, idle_loop_count, running);
-            //             }
+#if !defined(PIKA_HAVE_SCHEDULER_THREAD_MAP) ||                                \
+    !defined(PIKA_HAVE_THREAD_MINIMAL_DEADLOCK_DETECTION)
+            PIKA_UNUSED(num_thread);
+            PIKA_UNUSED(idle_loop_count);
+            PIKA_UNUSED(running);
             return false;
-            // #endif
+#else
+            if (get_minimal_deadlock_detection_enabled())
+            {
+                std::lock_guard<mutex_type> lk(mtx_);
+                return detail::dump_suspended_threads(
+                    num_thread, thread_map_, idle_loop_count, running);
+            }
+            return false;
+#endif
         }
 
         ///////////////////////////////////////////////////////////////////////
@@ -1249,12 +1245,4 @@ namespace pika { namespace threads { namespace policies {
         pika::concurrency::detail::cache_line_data<std::atomic<std::int64_t>>
             work_items_count_;
     };
-
-    ///////////////////////////////////////////////////////////////////////////
-    template <typename Mutex, typename PendingQueuing, typename StagedQueuing,
-        typename TerminatedQueuing>
-    pika::detail::internal_allocator<typename thread_queue<Mutex,
-        PendingQueuing, StagedQueuing, TerminatedQueuing>::task_description>
-        thread_queue<Mutex, PendingQueuing, StagedQueuing,
-            TerminatedQueuing>::task_description_alloc_;
-}}}    // namespace pika::threads::policies
+}    // namespace pika::threads::policies

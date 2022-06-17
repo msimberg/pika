@@ -38,18 +38,7 @@
 
 // TODO: add branch prediction and function heat
 
-///////////////////////////////////////////////////////////////////////////////
-namespace pika { namespace threads { namespace policies {
-    ///////////////////////////////////////////////////////////////////////////
-#if defined(PIKA_HAVE_CXX11_STD_ATOMIC_128BIT)
-    using default_local_priority_queue_scheduler_terminated_queue =
-        lockfree_lifo;
-#else
-    using default_local_priority_queue_scheduler_terminated_queue =
-        lockfree_fifo;
-#endif
-
-    ///////////////////////////////////////////////////////////////////////////
+namespace pika::threads::policies {
     /// The local_priority_queue_scheduler maintains exactly one queue of work
     /// items (threads) per OS thread, where this OS thread pulls its next work
     /// from. Additionally it maintains separate queues: several for high
@@ -57,18 +46,11 @@ namespace pika { namespace threads { namespace policies {
     /// High priority threads are executed by the first N OS threads before any
     /// other work is executed. Low priority threads are executed by the last
     /// OS thread whenever no other work is available.
-    template <typename Mutex = std::mutex,
-        typename PendingQueuing = lockfree_fifo,
-        typename StagedQueuing = lockfree_fifo,
-        typename TerminatedQueuing =
-            default_local_priority_queue_scheduler_terminated_queue>
     class PIKA_EXPORT local_priority_queue_scheduler : public scheduler_base
     {
     public:
         using has_periodic_maintenance = std::false_type;
-
-        using thread_queue_type = thread_queue<Mutex, PendingQueuing,
-            StagedQueuing, TerminatedQueuing>;
+        using thread_queue_type = thread_queue;
 
         // the scheduler type takes two initialization parameters:
         //    the number of queues
@@ -1408,6 +1390,6 @@ namespace pika { namespace threads { namespace policies {
             std::vector<std::size_t>>>
             victim_threads_;
     };
-}}}    // namespace pika::threads::policies
+}    // namespace pika::threads::policies
 
 #include <pika/config/warnings_suffix.hpp>

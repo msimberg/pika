@@ -200,11 +200,12 @@ namespace pika { namespace threads {
                     "cannot instantiate a thread-manager if the thread-pool" +
                     name + " has an unspecified scheduler type");
             }
+            // TODO: All are fifo now; remove duplicates.
             case resource::local:
             {
                 // instantiate the scheduler
                 using local_sched_type =
-                    pika::threads::policies::local_queue_scheduler<>;
+                    pika::threads::policies::local_queue_scheduler;
 
                 local_sched_type::init_parameter_type init(
                     thread_pool_init.num_threads_,
@@ -241,8 +242,7 @@ namespace pika { namespace threads {
 
                 // instantiate the scheduler
                 using local_sched_type =
-                    pika::threads::policies::local_priority_queue_scheduler<
-                        std::mutex, pika::threads::policies::lockfree_fifo>;
+                    pika::threads::policies::local_priority_queue_scheduler;
 
                 local_sched_type::init_parameter_type init(
                     thread_pool_init.num_threads_,
@@ -281,8 +281,7 @@ namespace pika { namespace threads {
 
                 // instantiate the scheduler
                 using local_sched_type =
-                    pika::threads::policies::local_priority_queue_scheduler<
-                        std::mutex, pika::threads::policies::lockfree_lifo>;
+                    pika::threads::policies::local_priority_queue_scheduler;
 
                 local_sched_type::init_parameter_type init(
                     thread_pool_init.num_threads_,
@@ -316,7 +315,7 @@ namespace pika { namespace threads {
             {
                 // instantiate the scheduler
                 using local_sched_type =
-                    pika::threads::policies::static_queue_scheduler<>;
+                    pika::threads::policies::static_queue_scheduler;
 
                 local_sched_type::init_parameter_type init(
                     thread_pool_init.num_threads_,
@@ -353,7 +352,7 @@ namespace pika { namespace threads {
 
                 // instantiate the scheduler
                 using local_sched_type =
-                    pika::threads::policies::static_priority_queue_scheduler<>;
+                    pika::threads::policies::static_priority_queue_scheduler;
 
                 local_sched_type::init_parameter_type init(
                     thread_pool_init.num_threads_,
@@ -391,8 +390,7 @@ namespace pika { namespace threads {
 
                 // instantiate the scheduler
                 using local_sched_type =
-                    pika::threads::policies::local_priority_queue_scheduler<
-                        std::mutex, pika::threads::policies::lockfree_fifo>;
+                    pika::threads::policies::local_priority_queue_scheduler;
 
                 local_sched_type::init_parameter_type init(
                     thread_pool_init.num_threads_,
@@ -437,8 +435,7 @@ namespace pika { namespace threads {
 
                 // instantiate the scheduler
                 using local_sched_type =
-                    pika::threads::policies::local_priority_queue_scheduler<
-                        std::mutex, pika::threads::policies::lockfree_lifo>;
+                    pika::threads::policies::local_priority_queue_scheduler;
 
                 local_sched_type::init_parameter_type init(
                     thread_pool_init.num_threads_,
