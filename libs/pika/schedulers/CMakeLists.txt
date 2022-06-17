@@ -23,8 +23,14 @@ set(schedulers_headers
     pika/modules/schedulers.hpp
 )
 
-set(schedulers_sources deadlock_detection.cpp maintain_queue_wait_times.cpp
-                       thread_queue.cpp
+set(schedulers_sources
+    deadlock_detection.cpp
+    local_priority_queue_scheduler.cpp
+    local_queue_scheduler.cpp
+    maintain_queue_wait_times.cpp
+    static_priority_queue_scheduler.cpp
+    static_queue_scheduler.cpp
+    thread_queue.cpp
 )
 
 include(pika_add_module)

@@ -9,14 +9,8 @@
 #pragma once
 
 #include <pika/config.hpp>
-
-#include <pika/assert.hpp>
 #include <pika/schedulers/local_priority_queue_scheduler.hpp>
-#include <pika/schedulers/lockfree_queue_backends.hpp>
 
-#include <cstddef>
-#include <cstdint>
-#include <mutex>
 #include <string>
 
 #include <pika/config/warnings_prefix.hpp>
@@ -30,7 +24,7 @@ namespace pika::threads::policies {
     /// other work is executed. Low priority threads are executed by the last
     /// OS thread whenever no other work is available.
     /// This scheduler does not do any work stealing.
-    class PIKA_EXPORT static_priority_queue_scheduler
+    class PIKA_EXPORT static_priority_queue_scheduler final
       : public local_priority_queue_scheduler
     {
     public:
@@ -38,26 +32,9 @@ namespace pika::threads::policies {
         using init_parameter_type = typename base_type::init_parameter_type;
 
         static_priority_queue_scheduler(init_parameter_type const& init,
-            bool deferred_initialization = true)
-          : base_type(init, deferred_initialization)
-        {
-            // disable thread stealing to begin with
-            this->remove_scheduler_mode(scheduler_mode(
-                policies::enable_stealing | policies::enable_stealing_numa));
-        }
-
-        void set_scheduler_mode(scheduler_mode mode) override
-        {
-            // this scheduler does not support stealing or numa stealing
-            mode = scheduler_mode(mode & ~scheduler_mode::enable_stealing);
-            mode = scheduler_mode(mode & ~scheduler_mode::enable_stealing_numa);
-            scheduler_base::set_scheduler_mode(mode);
-        }
-
-        static std::string get_scheduler_name()
-        {
-            return "static_priority_queue_scheduler";
-        }
+            bool deferred_initialization = true);
+        void set_scheduler_mode(scheduler_mode mode) override;
+        static std::string get_scheduler_name();
     };
 }    // namespace pika::threads::policies
 
