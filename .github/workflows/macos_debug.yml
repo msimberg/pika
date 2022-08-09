@@ -8,13 +8,6 @@ name: macOS CI (Debug)
 
 on:
   push:
-    branches:
-      # Development and release branches
-      - main
-      - release**
-      # Bors branches
-      - trying
-      - staging
 
 # Note that this file contains a lot of duplication between the workflow steps.
 # That is because GitHub actions doesn't support YAML anchors:
@@ -38,19 +31,14 @@ jobs:
     runs-on: macos-latest
 
     steps:
-    - name: Install dependencies
-      run: |
-        # Workaround for https://github.com/actions/virtual-environments/issues/2322
-        rm -rf /usr/local/bin/2to3
-        export HOMEBREW_NO_INSTALL_CLEANUP=TRUE
-        brew upgrade
-        brew update
-        brew install boost cmake hwloc ninja
+    - uses: cachix/install-nix-action@v15
+      with:
+        nix_path: nixpkgs=channel:nixos-unstable
     - uses: actions/checkout@v2
     - name: Configure
       shell: bash
       run: |
-          cmake \
+          nix-shell shell.nix --command "cmake \
               -H. \
               -Bbuild \
               -GNinja \
@@ -64,7 +52,7 @@ jobs:
               -DPIKA_WITH_MALLOC=system \
               -DPIKA_WITH_CHECK_MODULE_DEPENDENCIES=ON \
               -DPIKA_WITH_COMPILER_WARNINGS=ON \
-              -DPIKA_WITH_COMPILER_WARNINGS_AS_ERRORS=On
+              -DPIKA_WITH_COMPILER_WARNINGS_AS_ERRORS=On"
     - name: Build pika
       shell: bash
       run: |
