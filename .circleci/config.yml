@@ -10,6 +10,7 @@ branch_filter: &branch_filter
       branches:
         only:
           # Development and release branches
+          - inshpect # TODO
           - main
           - /release.*/
           # Bors branches
