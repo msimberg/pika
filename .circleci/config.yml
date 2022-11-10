@@ -300,6 +300,32 @@ jobs:
       - store_test_results:
           path: /report
 
+  inshpect:
+    <<: *defaults
+    steps:
+      - run:
+          name: Getting inshpect
+          command: |
+              apt update
+              apt install -y ripgrep fd-find
+              curl -sSLf https://github.com/TomWright/dasel/releases/download/v1.27.3/dasel_linux_amd64 -o dasel && chmod +x dasel
+              curl -sSLf https://github.com/pika-org/inshpect/blob/main/inshpect -o inshpect && chmod +x inshpect
+      - run:
+          name: Running inshpect
+          command: |
+              export INSHPECT_FD=fd-find
+              ./inshpect /pika/source /pika/source/.inshpect.toml > inshpect.txt
+              res=$?
+              ./inshpect /pika/source /pika/source/.inshpect-noncpp.toml > inshpect-noncpp.txt
+              res_noncpp=$?
+              exit $((res + res_noncpp))
+      - store_artifacts:
+          path: inshpect.txt
+          destination: inshpect.txt
+      - store_artifacts:
+          path: inshpect-noncpp.txt
+          destination: inshpect-noncpp.txt
+
   spellcheck:
     <<: *defaults
     steps:
@@ -720,6 +746,7 @@ workflows:
       - spellcheck:
           requires:
             - checkout_code
+      - inshpect
       - inspect:
           requires:
             - core
