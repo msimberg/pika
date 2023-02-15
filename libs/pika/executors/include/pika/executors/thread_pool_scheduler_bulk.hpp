@@ -30,6 +30,12 @@
 #include <pika/threading_base/register_thread.hpp>
 #include <pika/threading_base/thread_description.hpp>
 
+#define PIKA_THREAD_POOL_SCHEDULER_BULK_USE_ARRIVAL_TREE
+
+#if defined(PIKA_THREAD_POOL_SCHEDULER_BULK_USE_ARRIVAL_TREE)
+#include <pika/concurrency/detail/arrival_tree.hpp>
+#endif
+
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -278,7 +284,7 @@ namespace pika::thread_pool_bulk_detail {
                 // This struct encapsulates the work done by one worker thread.
                 struct task_function
                 {
-                    operation_state* const op_state;
+                    operation_state* op_state;
                     size_type const n;
                     std::uint32_t const chunk_size;
                     std::uint32_t const worker_thread;
@@ -311,7 +317,12 @@ namespace pika::thread_pool_bulk_detail {
                     // receiver.
                     void finish() const
                     {
+// TODO: Replace with combining tree to reduce atomic accesses
+#if defined(PIKA_THREAD_POOL_SCHEDULER_BULK_USE_ARRIVAL_TREE)
+                        if (op_state->arrival.arrive(worker_thread))
+#else
                         if (--(op_state->tasks_remaining) == 0)
+#endif
                         {
                             if (op_state->exception_thrown)
                             {
@@ -457,6 +468,13 @@ namespace pika::thread_pool_bulk_detail {
                     auto const n = pika::util::size(r.op_state->shape);
                     if (n == 0)
                     {
+                        // TODO
+                        for (std::size_t i = 0;
+                             i < r.op_state->num_worker_threads; ++i)
+                        {
+                            r.op_state->arrival.arrive(i);
+                        }
+
                         pika::execution::experimental::set_value(
                             PIKA_MOVE(r.op_state->receiver),
                             PIKA_FORWARD(Ts, ts)...);
@@ -525,6 +543,9 @@ namespace pika::thread_pool_bulk_detail {
                 queues{num_worker_threads};
             PIKA_NO_UNIQUE_ADDRESS std::decay_t<Shape> shape;
             PIKA_NO_UNIQUE_ADDRESS std::decay_t<F> f;
+#if defined(PIKA_THREAD_POOL_SCHEDULER_BULK_USE_ARRIVAL_TREE)
+            pika::detail::arrival_tree arrival;
+#endif
             PIKA_NO_UNIQUE_ADDRESS std::decay_t<Receiver> receiver;
             std::atomic<decltype(pika::util::size(shape))> tasks_remaining{
                 num_worker_threads};
@@ -545,6 +566,9 @@ namespace pika::thread_pool_bulk_detail {
                     PIKA_FORWARD(Sender_, sender), bulk_receiver{this}))
               , shape(PIKA_FORWARD(Shape_, shape))
               , f(PIKA_FORWARD(F_, f))
+#if defined(PIKA_THREAD_POOL_SCHEDULER_BULK_USE_ARRIVAL_TREE)
+              , arrival(num_worker_threads)
+#endif
               , receiver(PIKA_FORWARD(Receiver_, receiver))
             {
             }
