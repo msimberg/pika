@@ -358,6 +358,23 @@ void function_futures_apply_hierarchical_placement(
         duration, csv);
 }
 
+void function_bulk(std::uint64_t count, bool csv)
+{
+    auto const func = [](auto) { null_function(); };
+
+    // start the clock
+    high_resolution_timer walltime;
+
+    pika::this_thread::experimental::sync_wait(
+        pika::execution::experimental::schedule(
+            pika::execution::experimental::thread_pool_scheduler{}) |
+        pika::execution::experimental::bulk(count, func));
+
+    // stop the clock
+    const double duration = walltime.elapsed();
+    print_stats("bulk", "bulk", "thread_pool_scheduler", count, duration, csv);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 int pika_main(variables_map& vm)
 {
@@ -398,6 +415,7 @@ int pika_main(variables_map& vm)
                 function_futures_register_work(count, csv);
                 function_futures_create_thread(count, csv);
                 function_futures_apply_hierarchical_placement(count, csv);
+                function_bulk(count, csv);
             }
         }
     }
