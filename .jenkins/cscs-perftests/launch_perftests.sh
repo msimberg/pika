@@ -40,8 +40,15 @@ for executable in "${pika_targets[@]}"; do
 
     # TODO: make schedulers and other options vary
 
-    # Run performance tests
-    ${perftests_dir}/driver.py -v -l "$logfile_tmp" perftest run --local True \
+    # Run performance tests. This is run through srun so that the CPU frequency
+    # can be controlled. HighM1 should be a portable way of disabling turbo
+    # boost. It does not completely disable frequency scaling, but should
+    # already significantly reduce variations due to frequency scaling.
+    # Technically HighM1 means one step below the highest (non turbo boost)
+    # frequency supported by the CPU.  For more details see
+    # https://bugs.schedmd.com/show_bug.cgi?id=701 and
+    # https://slurm.schedmd.com/srun.html#OPT_cpu-freq.
+    srun --cpu-freq=HighM1 ${perftests_dir}/driver.py -v -l "$logfile_tmp" perftest run --local True \
         --run_output "$result" --targets-and-opts "${run_command[@]}" ||
         {
             echo 'Running failed'
