@@ -14,7 +14,7 @@
 #include <pika/execution_base/sender.hpp>
 #include <pika/execution_base/this_thread.hpp>
 #include <pika/functional/unique_function.hpp>
-#include <pika/synchronization/mutex.hpp>
+#include <pika/synchronization/spinlock.hpp>
 
 #include <atomic>
 #include <exception>
@@ -40,7 +40,7 @@ namespace pika::execution::experimental {
             std::atomic<bool> value_set{false};
             std::optional<T> value{std::nullopt};
             shared_state_ptr_type next_state{nullptr};
-            pika::mutex mtx{};
+            pika::spinlock mtx{};
             pika::detail::small_vector<
                 pika::util::detail::unique_function<void(shared_state_ptr_type)>, 1>
                 continuations{};
@@ -101,7 +101,7 @@ namespace pika::execution::experimental {
             template <typename F>
             void add_continuation(F&& continuation)
             {
-                std::lock_guard<pika::mutex> l(mtx);
+                std::lock_guard<pika::spinlock> l(mtx);
                 continuations.emplace_back(PIKA_FORWARD(F, continuation));
             }
         };
@@ -111,7 +111,7 @@ namespace pika::execution::experimental {
         {
             using shared_state_ptr_type = std::shared_ptr<async_rw_mutex_shared_state>;
             shared_state_ptr_type next_state{nullptr};
-            pika::mutex mtx{};
+            pika::spinlock mtx{};
             pika::detail::small_vector<
                 pika::util::detail::unique_function<void(shared_state_ptr_type)>, 1>
                 continuations{};
@@ -144,7 +144,7 @@ namespace pika::execution::experimental {
             template <typename F>
             void add_continuation(F&& continuation)
             {
-                std::lock_guard<pika::mutex> l(mtx);
+                std::lock_guard<pika::spinlock> l(mtx);
                 continuations.emplace_back(PIKA_FORWARD(F, continuation));
             }
         };
