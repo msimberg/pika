@@ -324,7 +324,6 @@ namespace pika::threads::detail {
 
         // support detail::manage_executor interface
         std::atomic<long> thread_count_;
-        std::atomic<std::int64_t> tasks_scheduled_;
 
         std::size_t max_idle_loop_count_;
         std::size_t max_busy_loop_count_;
