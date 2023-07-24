@@ -435,7 +435,7 @@ namespace pika::detail {
         ini_config.emplace_back("pika.ignore_process_mask!=" + std::to_string(!use_process_mask_));
 
         // handle setting related to schedulers
-        queuing_ = detail::handle_queuing(cfgmap, vm, "local-priority-fifo");
+        queuing_ = detail::handle_queuing(cfgmap, vm, "local-priority-atomic-queue");
         ini_config.emplace_back("pika.scheduler=" + queuing_);
 
         affinity_domain_ = detail::handle_affinity(cfgmap, vm, "pu");
