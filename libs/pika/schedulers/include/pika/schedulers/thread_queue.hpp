@@ -688,8 +688,8 @@ namespace pika::threads::detail {
                         *id = PIKA_MOVE(thrd);
                     }
 
-                    if (&ec != &throws)
-                        ec = make_success_code();
+                    // if (&ec != &throws)
+                    //     ec = make_success_code();
                     return;
                 }
             }
@@ -720,8 +720,8 @@ namespace pika::threads::detail {
             {
                 throw std::runtime_error("failed to push task");
             }
-            if (&ec != &throws)
-                ec = make_success_code();
+            // if (&ec != &throws)
+            //     ec = make_success_code();
         }
 
         void move_work_items_from(thread_queue* src, std::int64_t count)
