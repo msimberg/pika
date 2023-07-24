@@ -548,6 +548,26 @@ namespace pika::threads::detail {
                 if (result)
                     return true;
                 this_high_priority_queue->increment_num_pending_misses();
+
+                if (enable_stealing)
+                {
+                    for (std::size_t idx : victim_threads_[num_thread].data_)
+                    {
+                        PIKA_ASSERT(idx != num_thread);
+
+                        if (idx < num_high_priority_queues_ &&
+                            num_thread < num_high_priority_queues_)
+                        {
+                            thread_queue_type* q = high_priority_queues_[idx].data_;
+                            if (q->get_next_thread(thrd, running, true))
+                            {
+                                q->increment_num_stolen_from_pending();
+                                this_high_priority_queue->increment_num_stolen_to_pending();
+                                return true;
+                            }
+                        }
+                    }
+                }
             }
 
             {
@@ -575,23 +595,9 @@ namespace pika::threads::detail {
 
             if (enable_stealing)
             {
-                thread_queue_type* this_high_priority_queue =
-                    high_priority_queues_[num_thread].data_;
-
                 for (std::size_t idx : victim_threads_[num_thread].data_)
                 {
                     PIKA_ASSERT(idx != num_thread);
-
-                    if (idx < num_high_priority_queues_ && num_thread < num_high_priority_queues_)
-                    {
-                        thread_queue_type* q = high_priority_queues_[idx].data_;
-                        if (q->get_next_thread(thrd, running, true))
-                        {
-                            q->increment_num_stolen_from_pending();
-                            this_high_priority_queue->increment_num_stolen_to_pending();
-                            return true;
-                        }
-                    }
 
                     if (queues_[idx].data_->get_next_thread(thrd, running, true))
                     {
