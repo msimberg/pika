@@ -131,7 +131,7 @@ namespace pika::util {
             "localities = 1",
             "first_pu = 0",
             "runtime_mode = console",
-            "scheduler = local-priority-atomic-queue",
+            "scheduler = local-priority-ramalhete",
             "affinity = core",
             "pu_step = 1",
             "pu_offset = 0",
