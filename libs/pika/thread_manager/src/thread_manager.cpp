@@ -201,7 +201,8 @@ namespace pika::threads::detail {
                 // instantiate the scheduler
                 using local_sched_type =
                     pika::threads::detail::local_priority_queue_scheduler<std::mutex,
-                        pika::threads::detail::lockfree_fifo>;
+                        pika::threads::detail::lockfree_ramalhete,
+                        pika::threads::detail::lockfree_ramalhete>;
 
                 local_sched_type::init_parameter_type init(thread_pool_init.num_threads_,
                     thread_pool_init.affinity_data_, num_high_priority_queues, thread_queue_init,

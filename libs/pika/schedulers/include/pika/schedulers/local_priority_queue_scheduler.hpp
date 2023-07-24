@@ -57,8 +57,8 @@ namespace pika::threads::detail {
     /// High priority threads are executed by the first N OS threads before any
     /// other work is executed. Low priority threads are executed by the last
     /// OS thread whenever no other work is available.
-    template <typename Mutex = std::mutex, typename PendingQueuing = lockfree_fifo,
-        typename StagedQueuing = lockfree_fifo,
+    template <typename Mutex = std::mutex, typename PendingQueuing = lockfree_ramalhete,
+        typename StagedQueuing = lockfree_ramalhete,
         typename TerminatedQueuing = default_local_priority_queue_scheduler_terminated_queue>
     class PIKA_EXPORT local_priority_queue_scheduler : public scheduler_base
     {
@@ -465,6 +465,7 @@ namespace pika::threads::detail {
                 num_thread %= num_queues_;
             }
 
+            // TODO: conditionally enable?
             std::unique_lock<pu_mutex_type> l;
             num_thread = select_active_pu(l, num_thread);
 
@@ -1040,7 +1041,7 @@ namespace pika::threads::detail {
                     {
                         thread_queue_type* q = high_priority_queues_[idx].data_;
                         result =
-                            this_high_priority_queue->wait_or_add_new(true, added, q) && result;
+                            this_high_priority_queue->wait_or_add_new(true, added, q, true) && result;
 
                         if (0 != added)
                         {
@@ -1050,7 +1051,7 @@ namespace pika::threads::detail {
                         }
                     }
 
-                    result = this_queue->wait_or_add_new(true, added, queues_[idx].data_) && result;
+                    result = this_queue->wait_or_add_new(true, added, queues_[idx].data_, true) && result;
 
                     if (0 != added)
                     {

@@ -439,14 +439,14 @@ namespace pika::threads::detail {
             std::size_t queue_num = std::size_t(-1), thread_queue_init_parameters parameters = {})
           : parameters_(parameters)
           , thread_map_count_(0)
-          , work_items_(128, queue_num)
+          , work_items_(1024, queue_num)
 #ifdef PIKA_HAVE_THREAD_QUEUE_WAITTIME
           , work_items_wait_(0)
           , work_items_wait_count_(0)
 #endif
-          , terminated_items_(128)
+          , terminated_items_(1024)
           , terminated_items_count_(0)
-          , new_tasks_(128)
+          , new_tasks_(1024)
 #ifdef PIKA_HAVE_THREAD_QUEUE_WAITTIME
           , new_tasks_wait_(0)
           , new_tasks_wait_count_(0)
@@ -985,8 +985,9 @@ namespace pika::threads::detail {
         {
             // try to generate new threads from task lists, but only if our
             // own list of threads is empty
-            if (0 == work_items_count_.data_.load(std::memory_order_relaxed))
-            {
+            // Don't check own list, we're asking for more because we don't have enough
+            // if (0 == work_items_count_.data_.load(std::memory_order_relaxed))
+            // {
                 // see if we can avoid grabbing the lock below
 
                 // don't try to steal if there are only a few tasks left on
@@ -1043,7 +1044,7 @@ namespace pika::threads::detail {
                     cleanup_terminated_locked();
                     return false;
                 }
-            }
+            // }
 
             bool canexit = cleanup_terminated(true);
             if (!running && canexit)
