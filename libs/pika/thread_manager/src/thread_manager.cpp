@@ -188,7 +188,7 @@ namespace pika::threads::detail {
                 break;
             }
 
-            case resource::local_priority_fifo:
+            case resource::local_priority_ramalhete:
             {
                 // set parameters for scheduler and pool instantiation and
                 // perform compatibility checks
@@ -203,6 +203,77 @@ namespace pika::threads::detail {
                     pika::threads::detail::local_priority_queue_scheduler<std::mutex,
                         pika::threads::detail::lockfree_ramalhete,
                         pika::threads::detail::lockfree_ramalhete>;
+
+                local_sched_type::init_parameter_type init(thread_pool_init.num_threads_,
+                    thread_pool_init.affinity_data_, num_high_priority_queues, thread_queue_init,
+                    "core-local_priority_queue_scheduler");
+
+                std::unique_ptr<local_sched_type> sched(new local_sched_type(init));
+
+                // set the default scheduler flags
+                sched->set_scheduler_mode(thread_pool_init.mode_);
+                // conditionally set/unset this flag
+                sched->update_scheduler_mode(scheduler_mode::enable_stealing_numa, !numa_sensitive);
+
+                // instantiate the pool
+                std::unique_ptr<thread_pool_base> pool(
+                    new pika::threads::detail::scheduled_thread_pool<local_sched_type>(
+                        PIKA_MOVE(sched), thread_pool_init));
+                pools_.push_back(PIKA_MOVE(pool));
+
+                break;
+            }
+
+            case resource::local_priority_atomic_queue:
+            {
+                // set parameters for scheduler and pool instantiation and
+                // perform compatibility checks
+                std::size_t num_high_priority_queues =
+                    pika::detail::get_entry_as<std::size_t>(rtcfg_,
+                        "pika.thread_queue.high_priority_queues", thread_pool_init.num_threads_);
+                check_num_high_priority_queues(
+                    thread_pool_init.num_threads_, num_high_priority_queues);
+
+                // instantiate the scheduler
+                using local_sched_type =
+                    pika::threads::detail::local_priority_queue_scheduler<std::mutex,
+                        pika::threads::detail::lockfree_atomic_queue,
+                        pika::threads::detail::lockfree_atomic_queue>;
+
+                local_sched_type::init_parameter_type init(thread_pool_init.num_threads_,
+                    thread_pool_init.affinity_data_, num_high_priority_queues, thread_queue_init,
+                    "core-local_priority_queue_scheduler");
+
+                std::unique_ptr<local_sched_type> sched(new local_sched_type(init));
+
+                // set the default scheduler flags
+                sched->set_scheduler_mode(thread_pool_init.mode_);
+                // conditionally set/unset this flag
+                sched->update_scheduler_mode(scheduler_mode::enable_stealing_numa, !numa_sensitive);
+
+                // instantiate the pool
+                std::unique_ptr<thread_pool_base> pool(
+                    new pika::threads::detail::scheduled_thread_pool<local_sched_type>(
+                        PIKA_MOVE(sched), thread_pool_init));
+                pools_.push_back(PIKA_MOVE(pool));
+
+                break;
+            }
+
+            case resource::local_priority_fifo:
+            {
+                // set parameters for scheduler and pool instantiation and
+                // perform compatibility checks
+                std::size_t num_high_priority_queues =
+                    pika::detail::get_entry_as<std::size_t>(rtcfg_,
+                        "pika.thread_queue.high_priority_queues", thread_pool_init.num_threads_);
+                check_num_high_priority_queues(
+                    thread_pool_init.num_threads_, num_high_priority_queues);
+
+                // instantiate the scheduler
+                using local_sched_type =
+                    pika::threads::detail::local_priority_queue_scheduler<std::mutex,
+                        pika::threads::detail::lockfree_fifo>;
 
                 local_sched_type::init_parameter_type init(thread_pool_init.num_threads_,
                     thread_pool_init.affinity_data_, num_high_priority_queues, thread_queue_init,

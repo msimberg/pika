@@ -19,6 +19,7 @@
 
 #include <xenium/ramalhete_queue.hpp>
 #include <xenium/reclamation/generic_epoch_based.hpp>
+#include <atomic_queue/atomic_queue.h>
 
 #include <pika/allocator_support/aligned_allocator.hpp>
 
@@ -384,6 +385,57 @@ namespace pika::threads::detail {
         struct apply
         {
             using type = lockfree_ramalhete_backend<T>;
+        };
+    };
+
+    template <typename T>
+    struct lockfree_atomic_queue_backend
+    {
+        using container_type = atomic_queue::AtomicQueueB<T>;
+
+        using value_type = T;
+        using reference = T&;
+        using const_reference = T const&;
+        using rvalue_reference = T&&;
+        using size_type = std::uint64_t;
+
+        lockfree_atomic_queue_backend(
+            size_type /* initial_size */ = 0, size_type /* num_thread */ = size_type(-1))
+          : queue_(1024)
+        {
+        }
+
+        bool push(const_reference val, bool /* other_end */ = false)
+        {
+            return queue_.try_push(val);
+        }
+
+        bool push(rvalue_reference val, bool /* other_end */ = false)
+        {
+            return queue_.try_push(std::move(val));
+        }
+
+        bool pop(reference val, bool /* steal */ = true)
+        {
+            return queue_.try_pop(val);
+        }
+
+        bool empty()
+        {
+            return false;
+            // return queue_.empty();
+        }
+
+    private:
+        container_type queue_;
+    };
+
+    struct lockfree_atomic_queue
+    {
+        template <typename T>
+        struct apply
+        {
+            using type = lockfree_atomic_queue_backend<T>;
         };
     };
 

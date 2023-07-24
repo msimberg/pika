@@ -446,6 +446,14 @@ namespace pika::resource::detail {
         {
             default_scheduler = scheduling_policy::local_priority_fifo;
         }
+        else if (0 == std::string("local-priority-ramalhete").find(default_scheduler_str))
+        {
+            default_scheduler = scheduling_policy::local_priority_ramalhete;
+        }
+        else if (0 == std::string("local-priority-atomic-queue").find(default_scheduler_str))
+        {
+            default_scheduler = scheduling_policy::local_priority_atomic_queue;
+        }
         else if (0 == std::string("local-priority-lifo").find(default_scheduler_str))
         {
             default_scheduler = scheduling_policy::local_priority_lifo;

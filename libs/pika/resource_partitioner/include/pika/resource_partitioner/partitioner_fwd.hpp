@@ -70,5 +70,7 @@ namespace pika::resource {
         abp_priority_fifo = 5,
         abp_priority_lifo = 6,
         shared_priority = 7,
+        local_priority_ramalhete = 8,
+        local_priority_atomic_queue = 9,
     };
 }    // namespace pika::resource

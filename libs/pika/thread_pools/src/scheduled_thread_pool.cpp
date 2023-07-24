@@ -30,6 +30,12 @@ template class PIKA_EXPORT pika::threads::detail::scheduled_thread_pool<
         pika::threads::detail::lockfree_ramalhete, pika::threads::detail::lockfree_ramalhete>>;
 
 template class PIKA_EXPORT pika::threads::detail::local_priority_queue_scheduler<std::mutex,
+    pika::threads::detail::lockfree_atomic_queue, pika::threads::detail::lockfree_atomic_queue>;
+template class PIKA_EXPORT pika::threads::detail::scheduled_thread_pool<pika::threads::detail::
+        local_priority_queue_scheduler<std::mutex, pika::threads::detail::lockfree_atomic_queue,
+            pika::threads::detail::lockfree_atomic_queue>>;
+
+template class PIKA_EXPORT pika::threads::detail::local_priority_queue_scheduler<std::mutex,
     pika::threads::detail::lockfree_fifo>;
 template class PIKA_EXPORT pika::threads::detail::scheduled_thread_pool<pika::threads::detail::
         local_priority_queue_scheduler<std::mutex, pika::threads::detail::lockfree_fifo>>;
