@@ -787,6 +787,11 @@ namespace pika::threads::detail {
         {
             std::int64_t work_items_count = work_items_count_.data_.load(std::memory_order_relaxed);
 
+            if (work_items_count == 0)
+            {
+                return false;
+            }
+
             if (allow_stealing && parameters_.data_.min_tasks_to_steal_pending_ > work_items_count)
             {
                 return false;
@@ -996,6 +1001,11 @@ namespace pika::threads::detail {
             // this queue
             std::int64_t new_tasks_count =
                 addfrom->new_tasks_count_.data_.load(std::memory_order_relaxed);
+            if (new_tasks_count == 0)
+            {
+                return false;
+            }
+
             bool enough_threads = new_tasks_count >= parameters_.data_.min_tasks_to_steal_staged_;
 
             if (running && !enough_threads)
@@ -1026,36 +1036,36 @@ namespace pika::threads::detail {
                 return false;    // avoid long wait on lock
 
             // stop running after all pika threads have been terminated
-            bool added_new = add_new_always(added, addfrom, lk, steal);
-            if (!added_new)
-            {
-                // Before exiting each of the OS threads deletes the
-                // remaining terminated pika threads
-                // REVIEW: Should we be doing this if we are stealing?
-                bool canexit = cleanup_terminated_locked(true);
-                if (!running && canexit)
-                {
-                    // we don't have any registered work items anymore
-                    //do_some_work();       // notify possibly waiting threads
-                    return true;    // terminate scheduling loop
-                }
-                return false;
-            }
-            else
-            {
-                cleanup_terminated_locked();
-                return false;
-            }
+            return add_new_always(added, addfrom, lk, steal);
+            // if (!added_new)
+            // {
+            //     // Before exiting each of the OS threads deletes the
+            //     // remaining terminated pika threads
+            //     // REVIEW: Should we be doing this if we are stealing?
+            //     bool canexit = cleanup_terminated_locked(true);
+            //     if (!running && canexit)
+            //     {
+            //         // we don't have any registered work items anymore
+            //         //do_some_work();       // notify possibly waiting threads
+            //         return true;    // terminate scheduling loop
+            //     }
+            //     return false;
+            // }
+            // else
+            // {
+            //     cleanup_terminated_locked();
+            //     return false;
+            // }
             // }
 
-            bool canexit = cleanup_terminated(true);
-            if (!running && canexit)
-            {
-                // we don't have any registered work items anymore
-                return true;    // terminate scheduling loop
-            }
+            // bool canexit = cleanup_terminated(true);
+            // if (!running && canexit)
+            // {
+            //     // we don't have any registered work items anymore
+            //     return true;    // terminate scheduling loop
+            // }
 
-            return false;
+            // return false;
         }
 
         ///////////////////////////////////////////////////////////////////////

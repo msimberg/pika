@@ -535,12 +535,12 @@ namespace pika::threads::detail {
             threads::detail::thread_id_ref_type& thrd, bool enable_stealing) override
         {
             PIKA_ASSERT(num_thread < num_queues_);
-            thread_queue_type* this_high_priority_queue = nullptr;
             thread_queue_type* this_queue = queues_[num_thread].data_;
 
             if (num_thread < num_high_priority_queues_)
             {
-                this_high_priority_queue = high_priority_queues_[num_thread].data_;
+                thread_queue_type* this_high_priority_queue =
+                    high_priority_queues_[num_thread].data_;
                 bool result = this_high_priority_queue->get_next_thread(thrd);
 
                 this_high_priority_queue->increment_num_pending_accesses();
@@ -574,6 +574,9 @@ namespace pika::threads::detail {
 
             if (enable_stealing)
             {
+                thread_queue_type* this_high_priority_queue =
+                    high_priority_queues_[num_thread].data_;
+
                 for (std::size_t idx : victim_threads_[num_thread].data_)
                 {
                     PIKA_ASSERT(idx != num_thread);
@@ -1040,8 +1043,8 @@ namespace pika::threads::detail {
                     if (idx < num_high_priority_queues_ && num_thread < num_high_priority_queues_)
                     {
                         thread_queue_type* q = high_priority_queues_[idx].data_;
-                        result =
-                            this_high_priority_queue->wait_or_add_new(true, added, q, true) && result;
+                        result = this_high_priority_queue->wait_or_add_new(true, added, q, true) &&
+                            result;
 
                         if (0 != added)
                         {
@@ -1051,7 +1054,8 @@ namespace pika::threads::detail {
                         }
                     }
 
-                    result = this_queue->wait_or_add_new(true, added, queues_[idx].data_, true) && result;
+                    result = this_queue->wait_or_add_new(true, added, queues_[idx].data_, true) &&
+                        result;
 
                     if (0 != added)
                     {
