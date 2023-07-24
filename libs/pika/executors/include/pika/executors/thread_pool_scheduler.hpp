@@ -16,7 +16,7 @@
 #include <pika/execution_base/receiver.hpp>
 #include <pika/execution_base/sender.hpp>
 #include <pika/threading_base/annotated_function.hpp>
-#include <pika/threading_base/register_thread.hpp>
+#include <pika/threading_base/create_work.hpp>
 #include <pika/threading_base/thread_description.hpp>
 
 #include <cstddef>
@@ -130,7 +130,7 @@ namespace pika::execution::experimental {
             threads::detail::thread_init_data data(
                 threads::detail::make_thread_function_nullary(PIKA_FORWARD(F, f)), desc, priority_,
                 schedulehint_, stacksize_);
-            threads::detail::register_work(data, pool_);
+            threads::detail::create_work(sched_, data);
         }
 
         template <typename F>
@@ -319,6 +319,7 @@ namespace pika::execution::experimental {
 
         pika::threads::detail::thread_pool_base* pool_ =
             pika::threads::detail::get_self_or_default_pool();
+        pika::threads::detail::scheduler_base* sched_ = pool_->get_scheduler();
         pika::execution::thread_priority priority_ = pika::execution::thread_priority::normal;
         pika::execution::thread_stacksize stacksize_ = pika::execution::thread_stacksize::small_;
         pika::execution::thread_schedule_hint schedulehint_{};
