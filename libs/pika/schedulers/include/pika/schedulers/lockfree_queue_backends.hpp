@@ -401,7 +401,7 @@ namespace pika::threads::detail {
 
         lockfree_atomic_queue_backend(
             size_type /* initial_size */ = 0, size_type /* num_thread */ = size_type(-1))
-          : queue_(1024)
+          : queue_(1024 * 128)
         {
         }
 
