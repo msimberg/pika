@@ -716,7 +716,10 @@ namespace pika::threads::detail {
 #else
             new (td) task_description{PIKA_MOVE(data)};    //-V106
 #endif
-            new_tasks_.push(td);
+            if (!new_tasks_.push(td))
+            {
+                throw std::runtime_error("failed to push task");
+            }
             if (&ec != &throws)
                 ec = make_success_code();
         }
@@ -740,7 +743,10 @@ namespace pika::threads::detail {
 #endif
 
                 bool finished = count == ++work_items_count_.data_;
-                work_items_.push(trd);
+                if (!work_items_.push(trd))
+                {
+                    throw std::runtime_error("failed to push task");
+                }
                 if (finished)
                     break;
             }
@@ -775,6 +781,7 @@ namespace pika::threads::detail {
                 }
                 else
                 {
+                    throw std::runtime_error("failed to push task");
                     --new_tasks_count_.data_;
                 }
             }
@@ -834,15 +841,21 @@ namespace pika::threads::detail {
             ++work_items_count_.data_;
 #ifdef PIKA_HAVE_THREAD_QUEUE_WAITTIME
             using namespace std::chrono;
-            work_items_.push(new thread_description{PIKA_MOVE(thrd),
-                                 duration<std::uint64_t, std::nano>(
-                                     high_resolution_clock::now().time_since_epoch())
-                                     .count()},
-                other_end);
+            if (!work_items_.push(new thread_description{PIKA_MOVE(thrd),
+                                      duration<std::uint64_t, std::nano>(
+                                          high_resolution_clock::now().time_since_epoch())
+                                          .count()},
+                    other_end))
+            {
+                throw std::runtime_error("failed to push task");
+            }
 #else
             // detach the thread from the id_ref without decrementing
             // the reference count
-            work_items_.push(thrd.detach(), other_end);
+            if (!work_items_.push(thrd.detach(), other_end))
+            {
+                throw std::runtime_error("failed to push task");
+            }
 #endif
         }
 
@@ -851,7 +864,10 @@ namespace pika::threads::detail {
         {
             PIKA_ASSERT(&thrd->get_queue<thread_queue>() == this);
 
-            terminated_items_.push(thrd);
+            if (!terminated_items_.push(thrd))
+            {
+                throw std::runtime_error("failed to push task");
+            }
 
             std::int64_t count = ++terminated_items_count_;
             if (count > parameters_.data_.max_terminated_threads_)
