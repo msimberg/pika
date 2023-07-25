@@ -121,13 +121,13 @@ namespace pika::threads::detail {
         // get/set scheduler mode
         scheduler_mode get_scheduler_mode() const
         {
-            return mode_.data_.load(std::memory_order_relaxed);
+            return mode_.data_;
         }
 
         // get/set scheduler mode
         bool has_scheduler_mode(scheduler_mode mode) const
         {
-            return (mode_.data_.load(std::memory_order_relaxed) & mode) != scheduler_mode{};
+            return (mode_.data_ & mode) != scheduler_mode{};
         }
 
         // set mode flags that control scheduler behaviour
@@ -341,7 +341,7 @@ namespace pika::threads::detail {
 
     protected:
         // the scheduler mode, protected from false sharing
-        pika::concurrency::detail::cache_line_data<std::atomic<scheduler_mode>> mode_;
+        pika::concurrency::detail::cache_line_data<scheduler_mode> mode_;
 
 #if defined(PIKA_HAVE_THREAD_MANAGER_IDLE_BACKOFF)
         // support for suspension on idle queues

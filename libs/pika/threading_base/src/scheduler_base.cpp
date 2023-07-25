@@ -305,7 +305,7 @@ namespace pika::threads::detail {
     void scheduler_base::set_scheduler_mode(scheduler_mode mode)
     {
         // distribute the same value across all cores
-        mode_.data_.store(mode, std::memory_order_release);
+        mode_.data_ = mode;
         do_some_work(std::size_t(-1));
     }
 
