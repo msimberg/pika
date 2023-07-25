@@ -386,7 +386,8 @@ namespace pika::threads::detail {
             {
                 // delete only this many threads
                 std::int64_t delete_count =
-                    (std::min)(static_cast<std::int64_t>(terminated_items_count_ / 10),
+                    (std::min)(static_cast<std::int64_t>(
+                                   terminated_items_count_.load(std::memory_order_relaxed)),
                         static_cast<std::int64_t>(parameters_.data_.max_delete_count_));
 
                 // delete at least this many threads
