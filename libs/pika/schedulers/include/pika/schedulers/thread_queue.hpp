@@ -134,23 +134,23 @@ namespace pika::threads::detail {
 
             thread_heap_type* heap = nullptr;
 
-            if (stacksize == parameters_.small_stacksize_)
+            if (stacksize == parameters_.data_.small_stacksize_)
             {
                 heap = &thread_heap_small_;
             }
-            else if (stacksize == parameters_.medium_stacksize_)
+            else if (stacksize == parameters_.data_.medium_stacksize_)
             {
                 heap = &thread_heap_medium_;
             }
-            else if (stacksize == parameters_.large_stacksize_)
+            else if (stacksize == parameters_.data_.large_stacksize_)
             {
                 heap = &thread_heap_large_;
             }
-            else if (stacksize == parameters_.huge_stacksize_)
+            else if (stacksize == parameters_.data_.huge_stacksize_)
             {
                 heap = &thread_heap_huge_;
             }
-            else if (stacksize == parameters_.nostack_stacksize_)
+            else if (stacksize == parameters_.data_.nostack_stacksize_)
             {
                 heap = &thread_heap_nostack_;
             }
@@ -181,7 +181,7 @@ namespace pika::threads::detail {
 
                 // Allocate a new thread object.
                 threads::detail::thread_data* p = nullptr;
-                if (stacksize == parameters_.nostack_stacksize_)
+                if (stacksize == parameters_.data_.nostack_stacksize_)
                 {
                     p = threads::detail::thread_data_stackless::create(data, this, stacksize);
                 }
@@ -282,26 +282,29 @@ namespace pika::threads::detail {
 
             // if we are desperate (no work in the queues), add some even if the
             // map holds more than max_thread_count
-            if (PIKA_LIKELY(parameters_.max_thread_count_))
+            if (PIKA_LIKELY(parameters_.data_.max_thread_count_))
             {
                 std::int64_t count = static_cast<std::int64_t>(thread_map_.size());
-                if (parameters_.max_thread_count_ >= count + parameters_.min_add_new_count_)
+                if (parameters_.data_.max_thread_count_ >=
+                    count + parameters_.data_.min_add_new_count_)
                 {    //-V104
-                    PIKA_ASSERT(parameters_.max_thread_count_ - count <
+                    PIKA_ASSERT(parameters_.data_.max_thread_count_ - count <
                         (std::numeric_limits<std::int64_t>::max)());
-                    add_count = static_cast<std::int64_t>(parameters_.max_thread_count_ - count);
-                    if (add_count < parameters_.min_add_new_count_)
-                        add_count = parameters_.min_add_new_count_;
-                    if (add_count > parameters_.max_add_new_count_)
-                        add_count = parameters_.max_add_new_count_;
+                    add_count =
+                        static_cast<std::int64_t>(parameters_.data_.max_thread_count_ - count);
+                    if (add_count < parameters_.data_.min_add_new_count_)
+                        add_count = parameters_.data_.min_add_new_count_;
+                    if (add_count > parameters_.data_.max_add_new_count_)
+                        add_count = parameters_.data_.max_add_new_count_;
                 }
                 else if (work_items_.empty())
                 {
                     // add this number of threads
-                    add_count = parameters_.min_add_new_count_;
+                    add_count = parameters_.data_.min_add_new_count_;
 
                     // increase max_thread_count
-                    parameters_.max_thread_count_ += parameters_.min_add_new_count_;    //-V101
+                    parameters_.data_.max_thread_count_ +=
+                        parameters_.data_.min_add_new_count_;    //-V101
                 }
                 else
                 {
@@ -318,23 +321,23 @@ namespace pika::threads::detail {
         {
             std::ptrdiff_t stacksize = threads::detail::get_thread_id_data(thrd)->get_stack_size();
 
-            if (stacksize == parameters_.small_stacksize_)
+            if (stacksize == parameters_.data_.small_stacksize_)
             {
                 thread_heap_small_.push_back(thrd);
             }
-            else if (stacksize == parameters_.medium_stacksize_)
+            else if (stacksize == parameters_.data_.medium_stacksize_)
             {
                 thread_heap_medium_.push_back(thrd);
             }
-            else if (stacksize == parameters_.large_stacksize_)
+            else if (stacksize == parameters_.data_.large_stacksize_)
             {
                 thread_heap_large_.push_back(thrd);
             }
-            else if (stacksize == parameters_.huge_stacksize_)
+            else if (stacksize == parameters_.data_.huge_stacksize_)
             {
                 thread_heap_huge_.push_back(thrd);
             }
-            else if (stacksize == parameters_.nostack_stacksize_)
+            else if (stacksize == parameters_.data_.nostack_stacksize_)
             {
                 thread_heap_nostack_.push_back(thrd);
             }
@@ -384,11 +387,11 @@ namespace pika::threads::detail {
                 // delete only this many threads
                 std::int64_t delete_count =
                     (std::min)(static_cast<std::int64_t>(terminated_items_count_ / 10),
-                        static_cast<std::int64_t>(parameters_.max_delete_count_));
+                        static_cast<std::int64_t>(parameters_.data_.max_delete_count_));
 
                 // delete at least this many threads
                 delete_count = (std::max)(
-                    delete_count, static_cast<std::int64_t>(parameters_.min_delete_count_));
+                    delete_count, static_cast<std::int64_t>(parameters_.data_.min_delete_count_));
 
                 threads::detail::thread_data* todelete;
                 while (delete_count && terminated_items_.pop(todelete))
@@ -785,7 +788,7 @@ namespace pika::threads::detail {
         {
             std::int64_t work_items_count = work_items_count_.data_.load(std::memory_order_relaxed);
 
-            if (allow_stealing && parameters_.min_tasks_to_steal_pending_ > work_items_count)
+            if (allow_stealing && parameters_.data_.min_tasks_to_steal_pending_ > work_items_count)
             {
                 return false;
             }
@@ -847,7 +850,7 @@ namespace pika::threads::detail {
             terminated_items_.push(thrd);
 
             std::int64_t count = ++terminated_items_count_;
-            if (count > parameters_.max_terminated_threads_)
+            if (count > parameters_.data_.max_terminated_threads_)
             {
                 cleanup_terminated(true);    // clean up all terminated threads
             }
@@ -993,7 +996,8 @@ namespace pika::threads::detail {
                 // this queue
                 std::int64_t new_tasks_count =
                     addfrom->new_tasks_count_.data_.load(std::memory_order_relaxed);
-                bool enough_threads = new_tasks_count >= parameters_.min_tasks_to_steal_staged_;
+                bool enough_threads =
+                    new_tasks_count >= parameters_.data_.min_tasks_to_steal_staged_;
 
                 if (running && !enough_threads)
                 {
@@ -1003,7 +1007,7 @@ namespace pika::threads::detail {
                             "thread_queue::wait_or_add_new: not enough threads to steal from queue "
                             "{} to queue {}, have {} but need at least {}",
                             fmt::ptr(addfrom), fmt::ptr(this), new_tasks_count,
-                            parameters_.min_tasks_to_steal_staged_);
+                            parameters_.data_.min_tasks_to_steal_staged_);
                     }
 
                     return false;
@@ -1078,10 +1082,10 @@ namespace pika::threads::detail {
         ///////////////////////////////////////////////////////////////////////
         void on_start_thread(std::size_t /* num_thread */)
         {
-            thread_heap_small_.reserve(parameters_.init_threads_count_);
-            thread_heap_medium_.reserve(parameters_.init_threads_count_);
-            thread_heap_large_.reserve(parameters_.init_threads_count_);
-            thread_heap_huge_.reserve(parameters_.init_threads_count_);
+            thread_heap_small_.reserve(parameters_.data_.init_threads_count_);
+            thread_heap_medium_.reserve(parameters_.data_.init_threads_count_);
+            thread_heap_large_.reserve(parameters_.data_.init_threads_count_);
+            thread_heap_huge_.reserve(parameters_.data_.init_threads_count_);
 
             // Pre-allocate init_threads_count threads, with accompanying stack,
             // with the default stack size
@@ -1092,7 +1096,7 @@ namespace pika::threads::detail {
                 "default without changing the code here.");
 
             std::lock_guard<mutex_type> lk(mtx_);
-            for (std::int64_t i = 0; i < parameters_.init_threads_count_; ++i)
+            for (std::int64_t i = 0; i < parameters_.data_.init_threads_count_; ++i)
             {
                 // We don't care about the init parameters since this thread
                 // will be rebound once it is actually used
@@ -1102,7 +1106,7 @@ namespace pika::threads::detail {
                 // immediately into the list of recycled threads
                 threads::detail::thread_data* p =
                     threads::detail::thread_data_stackful::create(init_data, this,
-                        parameters_.small_stacksize_, threads::detail::thread_id_addref::no);
+                        parameters_.data_.small_stacksize_, threads::detail::thread_id_addref::no);
                 PIKA_ASSERT(p);
 
                 // We initialize the stack eagerly
@@ -1116,7 +1120,7 @@ namespace pika::threads::detail {
         void on_error(std::size_t /* num_thread */, std::exception_ptr const& /* e */) {}
 
     private:
-        thread_queue_init_parameters parameters_;
+        pika::concurrency::detail::cache_line_data<thread_queue_init_parameters> parameters_;
 
         mutable mutex_type mtx_;    // mutex protecting the members
 
