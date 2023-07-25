@@ -789,6 +789,11 @@ namespace pika::threads::detail {
         {
             std::int64_t work_items_count = work_items_count_.data_.load(std::memory_order_relaxed);
 
+            if (work_items_count == 0)
+            {
+                return false;
+            }
+
             if (allow_stealing && parameters_.data_.min_tasks_to_steal_pending_ > work_items_count)
             {
                 return false;
