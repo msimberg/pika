@@ -1014,10 +1014,9 @@ namespace pika::threads::detail {
 
             if (num_thread < num_high_priority_queues_)
             {
-                this_high_priority_queue = high_priority_queues_[num_thread].data_;
-                result = this_high_priority_queue->wait_or_add_new(running, added) && result;
-                if (0 != added)
-                    return result;
+                // High priority threads are always immediately created, never staged
+                PIKA_ASSERT(high_priority_queues_[num_thread].data_->get_staged_queue_length(
+                                std::memory_order_relaxed) == 0);
             }
 
             result = this_queue->wait_or_add_new(running, added) && result;
