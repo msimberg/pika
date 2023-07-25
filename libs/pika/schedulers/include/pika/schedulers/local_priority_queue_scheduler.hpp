@@ -465,8 +465,8 @@ namespace pika::threads::detail {
                 num_thread %= num_queues_;
             }
 
-            std::unique_lock<pu_mutex_type> l;
-            num_thread = select_active_pu(l, num_thread);
+            // std::unique_lock<pu_mutex_type> l;
+            // num_thread = select_active_pu(l, num_thread);
 
             data.schedulehint.mode = execution::thread_schedule_hint_mode::thread;
             data.schedulehint.hint = static_cast<std::int16_t>(num_thread);
@@ -625,8 +625,8 @@ namespace pika::threads::detail {
                 num_thread %= num_queues_;
             }
 
-            std::unique_lock<pu_mutex_type> l;
-            num_thread = select_active_pu(l, num_thread, allow_fallback);
+            // std::unique_lock<pu_mutex_type> l;
+            // num_thread = select_active_pu(l, num_thread, allow_fallback);
 
             auto* thrdptr = get_thread_id_data(thrd);
             (void) thrdptr;
@@ -691,8 +691,8 @@ namespace pika::threads::detail {
                 num_thread %= num_queues_;
             }
 
-            std::unique_lock<pu_mutex_type> l;
-            num_thread = select_active_pu(l, num_thread, allow_fallback);
+            // std::unique_lock<pu_mutex_type> l;
+            // num_thread = select_active_pu(l, num_thread, allow_fallback);
 
             if (priority == execution::thread_priority::high_recursive ||
                 priority == execution::thread_priority::high ||
