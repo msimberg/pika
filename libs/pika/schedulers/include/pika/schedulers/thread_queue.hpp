@@ -993,7 +993,8 @@ namespace pika::threads::detail {
                 // this queue
                 std::int64_t new_tasks_count =
                     addfrom->new_tasks_count_.data_.load(std::memory_order_relaxed);
-                bool enough_threads = new_tasks_count >= parameters_.min_tasks_to_steal_staged_;
+                bool enough_threads = new_tasks_count == 0 ||
+                    new_tasks_count >= parameters_.min_tasks_to_steal_staged_;
 
                 if (running && !enough_threads)
                 {
