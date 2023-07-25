@@ -42,6 +42,8 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 namespace pika::threads::detail {
+    inline thread_local std::size_t curr_queue{0};
+
     ///////////////////////////////////////////////////////////////////////////
 #if defined(PIKA_HAVE_CXX11_STD_ATOMIC_128BIT)
     using default_local_priority_queue_scheduler_terminated_queue = lockfree_lifo;
@@ -109,7 +111,6 @@ namespace pika::threads::detail {
         local_priority_queue_scheduler(
             init_parameter_type const& init, bool deferred_initialization = true)
           : scheduler_base(init.num_queues_, init.description_, init.thread_queue_init_)
-          , curr_queue_(0)
           , affinity_data_(init.affinity_data_)
           , num_queues_(init.num_queues_)
           , num_high_priority_queues_(init.num_high_priority_queues_)
@@ -458,7 +459,7 @@ namespace pika::threads::detail {
 
             if (std::size_t(-1) == num_thread)
             {
-                num_thread = curr_queue_++ % num_queues_;
+                num_thread = curr_queue++ % num_queues_;
             }
             else if (num_thread >= num_queues_)
             {
@@ -618,7 +619,7 @@ namespace pika::threads::detail {
 
             if (std::size_t(-1) == num_thread)
             {
-                num_thread = curr_queue_++ % num_queues_;
+                num_thread = curr_queue++ % num_queues_;
             }
             else if (num_thread >= num_queues_)
             {
@@ -684,7 +685,7 @@ namespace pika::threads::detail {
 
             if (std::size_t(-1) == num_thread)
             {
-                num_thread = curr_queue_++ % num_queues_;
+                num_thread = curr_queue++ % num_queues_;
             }
             else if (num_thread >= num_queues_)
             {
@@ -1243,12 +1244,10 @@ namespace pika::threads::detail {
 
         void reset_thread_distribution() override
         {
-            curr_queue_.store(0, std::memory_order_release);
+            curr_queue = 0;
         }
 
     protected:
-        std::atomic<std::size_t> curr_queue_;
-
         pika::detail::affinity_data const& affinity_data_;
 
         std::size_t const num_queues_;
