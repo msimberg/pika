@@ -655,7 +655,7 @@ namespace pika::threads::detail {
                         scheduler.SchedulingPolicy::cleanup_terminated(num_thread, true) &&
                         scheduler.SchedulingPolicy::get_queue_length(num_thread) == 0;
 
-                    if (this_state.load() == runtime_state::pre_sleep)
+                    if (this_state.load(std::memory_order_relaxed) == runtime_state::pre_sleep)
                     {
                         if (can_exit)
                         {
@@ -692,7 +692,7 @@ namespace pika::threads::detail {
             }
 
             // something went badly wrong, give up
-            if (PIKA_UNLIKELY(this_state.load() == runtime_state::terminating))
+            if (PIKA_UNLIKELY(this_state.load(std::memory_order_relaxed) == runtime_state::terminating))
                 break;
 
             if (busy_loop_count > params.max_busy_loop_count_)
@@ -714,7 +714,7 @@ namespace pika::threads::detail {
                 // break if we were idling after 'may_exit'
                 if (may_exit)
                 {
-                    PIKA_ASSERT(this_state.load() != runtime_state::pre_sleep);
+                    PIKA_ASSERT(this_state.load(std::memory_order_relaxed) != runtime_state::pre_sleep);
 
                     {
                         bool can_exit = !running &&
@@ -726,7 +726,7 @@ namespace pika::threads::detail {
 
                         if (can_exit)
                         {
-                            this_state.store(runtime_state::stopped);
+                            this_state.store(runtime_state::stopped, std::memory_order_relaxed);
                             break;
                         }
                     }
