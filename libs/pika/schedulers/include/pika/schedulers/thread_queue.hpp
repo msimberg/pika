@@ -238,17 +238,17 @@ namespace pika::threads::detail {
 
                 if (PIKA_UNLIKELY(!p.second))
                 {
-                    --addfrom->new_tasks_count_.data_;
+                    addfrom->new_tasks_count_.data_.fetch_sub(1, std::memory_order_release);
                     lk.unlock();
                     PIKA_THROW_EXCEPTION(pika::error::out_of_memory, "thread_queue::add_new",
                         "Couldn't add new thread to the thread map");
                     return 0;
                 }
 
-                ++thread_map_count_;
+                thread_map_count_.fetch_add(1, std::memory_order_relaxed);
 
                 // Decrement only after thread_map_count_ has been incremented
-                --addfrom->new_tasks_count_.data_;
+                addfrom->new_tasks_count_.data_.fetch_sub(1, std::memory_order_release);
 
                 // insert the thread into the work-items queue assuming it is
                 // in pending state, thread would go out of scope otherwise
@@ -359,7 +359,7 @@ namespace pika::threads::detail {
             chrono::detail::tick_counter tc(cleanup_terminated_time_);
 #endif
 
-            if (terminated_items_count_.load(std::memory_order_acquire) == 0)
+            if (terminated_items_count_.load(std::memory_order_relaxed) == 0)
                 return true;
 
             if (delete_all)
@@ -369,7 +369,7 @@ namespace pika::threads::detail {
                 while (terminated_items_.pop(todelete))
                 {
                     threads::detail::thread_id_type tid(todelete);
-                    --terminated_items_count_;
+                    terminated_items_count_.fetch_sub(1, std::memory_order_release);
 
                     // this thread has to be in this map
                     PIKA_ASSERT(thread_map_.find(tid) != thread_map_.end());
@@ -377,7 +377,7 @@ namespace pika::threads::detail {
                     if (thread_map_.erase(tid) != 0)
                     {
                         recycle_thread(tid);
-                        --thread_map_count_;
+                        thread_map_count_.fetch_sub(1, std::memory_order_release);
                         PIKA_ASSERT(thread_map_count_ >= 0);
                     }
                 }
@@ -397,7 +397,7 @@ namespace pika::threads::detail {
                 while (delete_count && terminated_items_.pop(todelete))
                 {
                     threads::detail::thread_id_type tid(todelete);
-                    --terminated_items_count_;
+                    terminated_items_count_.fetch_sub(1, std::memory_order_release);
 
                     // this thread has to be in this map, except if it has changed
                     // its priority, then it could be elsewhere
@@ -406,7 +406,7 @@ namespace pika::threads::detail {
                     if (thread_map_.erase(tid) != 0)
                     {
                         recycle_thread(tid);
-                        --thread_map_count_;
+                        thread_map_count_.fetch_sub(1, std::memory_order_release);
                         PIKA_ASSERT(thread_map_count_ >= 0);
                     }
                     --delete_count;
@@ -513,21 +513,21 @@ namespace pika::threads::detail {
 
         ///////////////////////////////////////////////////////////////////////
         // This returns the current length of the queues (work items and new items)
-        std::int64_t get_queue_length(std::memory_order order = std::memory_order_acquire) const
+        std::int64_t get_queue_length(std::memory_order order = std::memory_order_relaxed) const
         {
             return work_items_count_.data_.load(order) + new_tasks_count_.data_.load(order);
         }
 
         // This returns the current length of the pending queue
         std::int64_t get_pending_queue_length(
-            std::memory_order order = std::memory_order_acquire) const
+            std::memory_order order = std::memory_order_relaxed) const
         {
             return work_items_count_.data_.load(order);
         }
 
         // This returns the current length of the staged queue
         std::int64_t get_staged_queue_length(
-            std::memory_order order = std::memory_order_acquire) const
+            std::memory_order order = std::memory_order_relaxed) const
         {
             return new_tasks_count_.data_.load(order);
         }
@@ -662,7 +662,7 @@ namespace pika::threads::detail {
                             "Couldn't add new thread to the map of threads");
                         return;
                     }
-                    ++thread_map_count_;
+                    thread_map_count_.fetch_add(1, std::memory_order_relaxed);
 
                     // this thread has to be in the map now
                     PIKA_ASSERT(thread_map_.find(thrd.noref()) != thread_map_.end());
@@ -727,7 +727,7 @@ namespace pika::threads::detail {
             thread_description_ptr trd;
             while (src->work_items_.pop(trd))
             {
-                --src->work_items_count_.data_;
+                src->work_items_count_.data_.fetch_sub(1, std::memory_order_release);
 
 #ifdef PIKA_HAVE_THREAD_QUEUE_WAITTIME
                 if (get_maintain_queue_wait_times_enabled())
@@ -740,7 +740,8 @@ namespace pika::threads::detail {
                 }
 #endif
 
-                bool finished = count == ++work_items_count_.data_;
+                bool finished =
+                    count == work_items_count_.data_.fetch_add(1, std::memory_order_relaxed);
                 work_items_.push(trd);
                 if (finished)
                     break;
@@ -817,7 +818,7 @@ namespace pika::threads::detail {
             if (0 != work_items_count && work_items_.pop(next_thrd, steal))
             {
                 thrd.reset(next_thrd, false);    // do not addref!
-                --work_items_count_.data_;
+                work_items_count_.data_.fetch_sub(1, std::memory_order_release);
                 return true;
             }
 #endif
@@ -827,7 +828,7 @@ namespace pika::threads::detail {
         /// Schedule the passed thread
         void schedule_thread(threads::detail::thread_id_ref_type thrd, bool other_end = false)
         {
-            ++work_items_count_.data_;
+            work_items_count_.data_.fetch_add(1, std::memory_order_relaxed);
 #ifdef PIKA_HAVE_THREAD_QUEUE_WAITTIME
             using namespace std::chrono;
             work_items_.push(new thread_description{PIKA_MOVE(thrd),
@@ -849,7 +850,7 @@ namespace pika::threads::detail {
 
             terminated_items_.push(thrd);
 
-            std::int64_t count = ++terminated_items_count_;
+            std::int64_t count = terminated_items_count_.fetch_add(1, std::memory_order_release);
             if (count > parameters_.data_.max_terminated_threads_)
             {
                 cleanup_terminated(true);    // clean up all terminated threads
@@ -862,14 +863,16 @@ namespace pika::threads::detail {
                                           threads::detail::thread_schedule_state::unknown) const
         {
             if (threads::detail::thread_schedule_state::terminated == state)
-                return terminated_items_count_;
+                return terminated_items_count_.load(std::memory_order_relaxed);
 
             if (threads::detail::thread_schedule_state::staged == state)
-                return new_tasks_count_.data_;
+                return new_tasks_count_.data_.load(std::memory_order_relaxed);
 
             if (threads::detail::thread_schedule_state::unknown == state)
             {
-                return thread_map_count_ + new_tasks_count_.data_ - terminated_items_count_;
+                return thread_map_count_.load(std::memory_order_relaxed) +
+                    new_tasks_count_.data_.load(std::memory_order_relaxed) -
+                    terminated_items_count_.load(std::memory_order_relaxed);
             }
 
             // acquire lock only if absolutely necessary
@@ -910,10 +913,10 @@ namespace pika::threads::detail {
             threads::detail::thread_schedule_state state =
                 threads::detail::thread_schedule_state::unknown) const
         {
-            std::uint64_t count = thread_map_count_;
+            std::uint64_t count = thread_map_count_.load(std::memory_order_relaxed);
             if (state == threads::detail::thread_schedule_state::terminated)
             {
-                count = terminated_items_count_;
+                count = terminated_items_count_.load(std::memory_order_relaxed);
             }
             else if (state == threads::detail::thread_schedule_state::staged)
             {
