@@ -458,7 +458,7 @@ namespace pika::threads::detail {
 
             if (std::size_t(-1) == num_thread)
             {
-                num_thread = curr_queue_++ % num_queues_;
+                num_thread = curr_queue_.fetch_add(1, std::memory_order_relaxed) % num_queues_;
             }
             else if (num_thread >= num_queues_)
             {
@@ -618,7 +618,7 @@ namespace pika::threads::detail {
 
             if (std::size_t(-1) == num_thread)
             {
-                num_thread = curr_queue_++ % num_queues_;
+                num_thread = curr_queue_.fetch_add(1, std::memory_order_relaxed) % num_queues_;
             }
             else if (num_thread >= num_queues_)
             {
@@ -684,7 +684,7 @@ namespace pika::threads::detail {
 
             if (std::size_t(-1) == num_thread)
             {
-                num_thread = curr_queue_++ % num_queues_;
+                num_thread = curr_queue_.fetch_add(1, std::memory_order_relaxed) % num_queues_;
             }
             else if (num_thread >= num_queues_)
             {
