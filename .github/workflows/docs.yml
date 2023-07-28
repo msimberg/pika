@@ -24,7 +24,7 @@ on:
 
 jobs:
   build:
-    name: github/documentation
+    name: github/documentation/build
     runs-on: ubuntu-latest
     container: pikaorg/pika-ci-base:17
 
@@ -37,6 +37,20 @@ jobs:
     - name: Upload HTML output as artifact
       uses: actions/upload-artifact@v3
       with:
-        name: HTML documentation
+        name: github-pages
         path: build/docs
         retention-days: 14
+  deploy:
+    name: github/documentation/deploy
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy documentation to GitHub Pages
+        uses: actions/deploy-pages@v2
+        id: deployment
