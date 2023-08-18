@@ -8,7 +8,7 @@
 // This is meant to be compared to resume_suspend and openmp_parallel_region.
 
 #include <pika/chrono.hpp>
-#include <pika/future.hpp>
+#include <pika/execution.hpp>
 #include <pika/init.hpp>
 #include <pika/program_options.hpp>
 #include <pika/testing/performance.hpp>
@@ -17,6 +17,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+
+namespace ex = pika::execution::experimental;
 
 int pika_main() { return pika::finalize(); }
 
@@ -40,9 +42,10 @@ int main(int argc, char** argv)
 
     pika::start(pika_main, argc, argv, init_args);
     std::uint64_t threads = pika::resource::get_num_threads("default");
+    auto sched = ex::thread_pool_scheduler{};
     pika::stop();
 
-    std::cout << "threads, resume [s], apply [s], suspend [s]" << std::endl;
+    std::cout << "threads, resume [s], execute [s], suspend [s]" << std::endl;
 
     double start_time = 0;
     double stop_time = 0;
@@ -61,16 +64,16 @@ int main(int argc, char** argv)
 
         for (std::size_t thread = 0; thread < threads; ++thread)
         {
-            pika::apply([]() {});
+            ex::execute(sched, [] {});
         }
 
-        auto t_apply = timer.elapsed();
+        auto t_execute = timer.elapsed();
 
         pika::stop();
         auto t_stop = timer.elapsed();
         stop_time += t_stop;
 
-        std::cout << threads << ", " << t_start << ", " << t_apply << ", " << t_stop << std::endl;
+        std::cout << threads << ", " << t_start << ", " << t_execute << ", " << t_stop << std::endl;
     }
     pika::util::print_cdash_timing("StartTime", start_time);
     pika::util::print_cdash_timing("StopTime", stop_time);

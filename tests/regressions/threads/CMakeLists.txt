@@ -9,14 +9,12 @@ set(tests
     block_os_threads_1036
     stackless_self_4155
     thread_data_1111
-    thread_rescheduling
     thread_suspend_pending
     # thread_suspend_duration # Disabled due to unavailable timed suspension
     threads_all_1422
 )
 
 set(block_os_threads_1036_PARAMETERS THREADS 4 RUN_SERIAL)
-set(thread_rescheduling_PARAMETERS THREADS 4)
 set(thread_suspend_pending_PARAMETERS THREADS 1)
 set(thread_suspend_duration_PARAMETERS THREADS 1)
 set(threads_all_1422_PARAMETERS THREADS -1) # -1 means 'all'

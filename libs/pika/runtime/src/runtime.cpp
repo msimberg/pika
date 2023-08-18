@@ -487,17 +487,9 @@ namespace pika {
         return thread_manager_->get_os_thread_count();
     }
 
-    std::uint32_t runtime::get_num_localities(pika::launch::sync_policy, error_code& /* ec */) const
-    {
-        return 1;
-    }
+    std::uint32_t runtime::get_num_localities(error_code& /* ec */) const { return 1; }
 
     std::uint32_t runtime::get_initial_num_localities() const { return 1; }
-
-    pika::future<std::uint32_t> runtime::get_num_localities() const
-    {
-        return make_ready_future(std::uint32_t(1));
-    }
 
     std::string runtime::get_locality_name() const { return "console"; }
 
@@ -1679,7 +1671,7 @@ namespace pika {
 
     /// \brief Return the number of localities which are currently registered
     ///        for the running application.
-    std::uint32_t get_num_localities(pika::launch::sync_policy, error_code& ec)
+    std::uint32_t get_num_localities(error_code& ec)
     {
         runtime* rt = get_runtime_ptr();
         if (nullptr == rt)
@@ -1689,7 +1681,7 @@ namespace pika {
             return std::size_t(0);
         }
 
-        return rt->get_num_localities(pika::launch::sync, ec);
+        return rt->get_num_localities(ec);
     }
 
     std::uint32_t get_initial_num_localities()
@@ -1703,19 +1695,6 @@ namespace pika {
         }
 
         return rt->get_initial_num_localities();
-    }
-
-    pika::future<std::uint32_t> get_num_localities()
-    {
-        runtime* rt = get_runtime_ptr();
-        if (nullptr == rt)
-        {
-            PIKA_THROW_EXCEPTION(pika::error::invalid_status, "pika::get_num_localities",
-                "the runtime system has not been initialized yet");
-            return make_ready_future(std::uint32_t(0));
-        }
-
-        return rt->get_num_localities();
     }
 
     namespace threads {

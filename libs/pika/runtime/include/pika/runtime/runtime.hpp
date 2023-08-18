@@ -9,7 +9,6 @@
 
 #include <pika/config.hpp>
 #include <pika/assert.hpp>
-#include <pika/futures/future.hpp>
 #include <pika/modules/program_options.hpp>
 #include <pika/modules/thread_manager.hpp>
 #include <pika/modules/topology.hpp>
@@ -350,11 +349,9 @@ namespace pika {
 
         virtual std::size_t get_num_worker_threads() const;
 
-        virtual std::uint32_t get_num_localities(pika::launch::sync_policy, error_code& ec) const;
+        virtual std::uint32_t get_num_localities(error_code& ec) const;
 
         virtual std::uint32_t get_initial_num_localities() const;
-
-        virtual pika::future<std::uint32_t> get_num_localities() const;
 
         virtual std::string get_locality_name() const;
 

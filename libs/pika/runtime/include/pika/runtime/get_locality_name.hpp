@@ -9,7 +9,6 @@
 #pragma once
 
 #include <pika/config.hpp>
-#include <pika/modules/futures.hpp>
 
 #include <string>
 
@@ -30,7 +29,5 @@ namespace pika {
     /// \returns  This function returns the name for the locality on which the
     ///           function is called. The name is retrieved from the underlying
     ///           networking layer and may be different for different parcelports.
-    ///
-    /// \see      \a future<std::string> get_locality_name(naming::id_type const& id)
     PIKA_EXPORT std::string get_locality_name();
 }    // namespace pika

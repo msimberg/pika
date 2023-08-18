@@ -10,8 +10,6 @@
 #pragma once
 
 #include <pika/config.hpp>
-#include <pika/async_base/launch_policy.hpp>
-#include <pika/futures/future_fwd.hpp>
 #include <pika/modules/errors.hpp>
 
 #include <cstdint>
@@ -33,20 +31,6 @@ namespace pika {
     PIKA_EXPORT std::uint32_t get_initial_num_localities();
 
     ///////////////////////////////////////////////////////////////////////////
-    /// \brief Asynchronously return the number of localities which are
-    ///        currently registered for the running application.
-    ///
-    /// The function \a get_num_localities asynchronously returns the
-    /// number of localities currently connected to the console. The returned
-    /// future represents the actual result.
-    ///
-    /// \note     This function will return meaningful results only if called
-    ///           from a pika-thread. It will return 0 otherwise.
-    ///
-    /// \see      \a pika::find_all_localities, \a pika::get_num_localities
-    PIKA_EXPORT pika::future<std::uint32_t> get_num_localities();
-
-    ///////////////////////////////////////////////////////////////////////////
     /// \brief Return the number of localities which are currently registered
     ///        for the running application.
     ///
@@ -66,5 +50,5 @@ namespace pika {
     ///           pika::exception.
     ///
     /// \see      \a pika::find_all_localities, \a pika::get_num_localities
-    PIKA_EXPORT std::uint32_t get_num_localities(launch::sync_policy, error_code& ec = throws);
+    PIKA_EXPORT std::uint32_t get_num_localities(error_code& ec = throws);
 }    // namespace pika

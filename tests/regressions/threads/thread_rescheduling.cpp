@@ -6,7 +6,7 @@
 //  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ////////////////////////////////////////////////////////////////////////////////
 
-#include <pika/future.hpp>
+#include <pika/execution.hpp>
 #include <pika/init.hpp>
 #include <pika/testing.hpp>
 #include <pika/thread.hpp>
@@ -24,9 +24,6 @@ using pika::program_options::variables_map;
 using std::chrono::milliseconds;
 
 using pika::threads::detail::register_thread;
-
-using pika::async;
-using pika::future;
 
 using pika::this_thread::suspend;
 using pika::threads::detail::set_thread_state;
@@ -84,7 +81,7 @@ void tree_boot(std::uint64_t count, std::uint64_t grain_size, thread_id_type thr
     PIKA_TEST(grain_size);
     PIKA_TEST(count);
 
-    std::vector<future<void>> promises;
+    std::vector<ex::unique_any_sender<>> senders;
 
     std::uint64_t const actors = (count > grain_size) ? grain_size : count;
 
@@ -100,16 +97,16 @@ void tree_boot(std::uint64_t count, std::uint64_t grain_size, thread_id_type thr
             if (child_count >= grain_size) break;
         }
 
-        promises.reserve(children + grain_size);
+        senedrs.reserve(children + grain_size);
     }
     else
-        promises.reserve(count);
+        senedrs.reserve(count);
 
     for (std::uint64_t i = 0; i < children; ++i)
-        promises.push_back(async(&tree_boot, child_count, grain_size, thread));
+        senedrs.push_back(async(&tree_boot, child_count, grain_size, thread));
 
     for (std::uint64_t i = 0; i < actors; ++i)
-        promises.push_back(async(&change_thread_state, thread));
+        senedrs.push_back(async(&change_thread_state, thread));
 
     detail::wait(promises);
 }
