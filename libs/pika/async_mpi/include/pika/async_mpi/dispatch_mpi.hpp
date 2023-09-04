@@ -26,6 +26,7 @@
 #include <pika/functional/detail/tag_fallback_invoke.hpp>
 #include <pika/functional/invoke.hpp>
 #include <pika/mpi_base/mpi.hpp>
+#include <pika/threading_base/scoped_annotation.hpp>
 
 #include <exception>
 #include <tuple>
@@ -125,9 +126,8 @@ namespace pika::mpi::experimental::detail {
                             PIKA_DETAIL_DP(mpi_tran<5>,
                                 debug(str<>("dispatch_mpi_recv"), "set_value_t", "stream",
                                     detail::stream_name(r.op_state.stream_)));
-#ifdef PIKA_HAVE_APEX
-                            apex::scoped_timer apex_post("pika::mpi::post");
-#endif
+                            pika::scoped_annotation post_annotation("pika::mpi::post");
+
                             // init a request
                             MPI_Request request;
                             int status = MPI_SUCCESS;
@@ -160,9 +160,8 @@ namespace pika::mpi::experimental::detail {
 
                             if (poll_request(request))
                             {
-#ifdef PIKA_HAVE_APEX
-                                apex::scoped_timer apex_invoke("pika::mpi::trigger");
-#endif
+                                pika::scoped_annotation trigger_annotation("pika::mpi::trigger");
+
                                 PIKA_DETAIL_DP(mpi_tran<7>,
                                     debug(str<>("dispatch_mpi_recv"), "eager poll ok",
                                         detail::stream_name(r.op_state.stream_), ptr(request)));

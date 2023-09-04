@@ -133,9 +133,8 @@ namespace pika::mpi::experimental::detail {
                             {
                                 pika::util::yield_while(
                                     [&request]() { return !detail::poll_request(request); });
-#ifdef PIKA_HAVE_APEX
-                                apex::scoped_timer apex_invoke("pika::mpi::trigger");
-#endif
+                                pika::scoped_annotation trigger_annotation("pika::mpi::trigger");
+
                                 // we just assume the return from mpi_test is always MPI_SUCCESS
                                 ex::set_value(PIKA_MOVE(r.op_state.receiver));
                                 break;
@@ -174,9 +173,9 @@ namespace pika::mpi::experimental::detail {
                                     r.op_state.cond_var.wait(
                                         l, [&]() { return r.op_state.completed; });
                                 }
-#ifdef PIKA_HAVE_APEX
-                                apex::scoped_timer apex_invoke("pika::mpi::trigger");
-#endif
+
+                                pika::scoped_annotation trigger_annotation("pika::mpi::trigger");
+
                                 // call set_value/set_error depending on mpi return status
                                 set_value_error_helper(
                                     r.op_state.status, PIKA_MOVE(r.op_state.receiver));
