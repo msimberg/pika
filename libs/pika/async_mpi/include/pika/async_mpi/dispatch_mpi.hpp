@@ -27,6 +27,8 @@
 #include <pika/functional/invoke.hpp>
 #include <pika/mpi_base/mpi.hpp>
 
+#include <mpi-ext.h>
+
 #include <exception>
 #include <tuple>
 #include <type_traits>
@@ -86,6 +88,12 @@ namespace pika::mpi::experimental::detail {
             std::decay_t<F> f;
             stream_type stream_;
 
+            // TODO: We should use the condition variable and mutex from the trigger operation
+            // state, not duplicate them here.
+            bool completed = false;
+            pika::detail::spinlock mutex;
+            pika::condition_variable cond_var;
+
             // -----------------------------------------------------------------
             // The mpi_receiver receives inputs from the previous sender,
             // invokes the mpi call, and sets a callback on the polling handler
@@ -108,6 +116,24 @@ namespace pika::mpi::experimental::detail {
                     ex::set_stopped(PIKA_MOVE(r.op_state.receiver));
                 }
 
+                /// typedef int (MPIX_Continue_cb_function)(int rc, void *cb_data);
+                static int cb([[maybe_unused]] int rc, void* cb_data)
+                {
+                    std::cerr << "in continuation\n";
+
+                    auto& op_state = *static_cast<operation_state*>(cb_data);
+
+                    {
+                        std::lock_guard lk(op_state.mutex);
+                        op_state.completed = true;
+                    }
+
+                    op_state.cond_var.notify_one();
+
+                    // TODO: Return rc?
+                    return MPI_SUCCESS;
+                }
+
                 // receive the MPI function invocable + arguments and add a request,
                 // then invoke the mpi function with the added request
                 // if the invocation gives an error, set_error
@@ -121,6 +147,25 @@ namespace pika::mpi::experimental::detail {
                         [&]() mutable {
                             using namespace pika::debug::detail;
                             using invoke_result_type = mpi_request_invoke_result_t<F, Ts...>;
+
+                            /// Initialize a continuation request.
+                            /// \param flags 0 or \ref MPIX_CONT_POLL_ONLY
+                            /// \param max_poll the maximum number of continuations to execute when testing
+                            ///                 the continuation request for completion or MPI_UNDEFINED for
+                            ///                 unlimited execution of eligible continuations
+                            /// \param info info object used to further control the behavior of the continuation request.
+                            ///             Currently supported:
+                            ///               - mpi_continue_thread: either "all" (any thread in the process may execute callbacks)
+                            ///                                      or "application" (only application threads may execute callbacks; default)
+                            ///               - mpi_continue_async_signal_safe: whether the callbacks may be executed from within a signal handler
+                            /// \param[out] cont_req the newly created continuation request
+                            ///
+                            /// OMPI_DECLSPEC int MPIX_Continue_init(int flags, int max_poll, MPI_Info info, MPI_Request *cont_req);
+
+                            // Initialize the continuation request
+                            MPI_Request cont_request;
+                            MPIX_Continue_init(0, 0, MPI_INFO_NULL, &cont_request);
+                            MPI_Start(&cont_request);
 
                             PIKA_DETAIL_DP(mpi_tran<5>,
                                 debug(str<>("dispatch_mpi_recv"), "set_value_t", "stream",
@@ -158,23 +203,47 @@ namespace pika::mpi::experimental::detail {
                                 return;
                             }
 
-                            if (poll_request(request))
+                            std::cerr << "registering continuation\n";
+                            MPIX_Continue(
+                                &request, &cb, &r.op_state, 0, MPI_STATUSES_IGNORE, cont_request);
+
                             {
-#ifdef PIKA_HAVE_APEX
-                                apex::scoped_timer apex_invoke("pika::mpi::trigger");
-#endif
-                                PIKA_DETAIL_DP(mpi_tran<7>,
-                                    debug(str<>("dispatch_mpi_recv"), "eager poll ok",
-                                        detail::stream_name(r.op_state.stream_), ptr(request)));
-                                // calls set_value(request), or set_error(mpi_exception(status))
-                                set_value_error_helper(
-                                    status, PIKA_MOVE(r.op_state.receiver), MPI_REQUEST_NULL);
+                                std::cerr << "waiting for continuation request\n";
+                                std::unique_lock l{r.op_state.mutex};
+                                r.op_state.cond_var.wait(l, [&]() { return r.op_state.completed; });
                             }
-                            else
-                            {
-                                set_value_error_helper(
-                                    status, PIKA_MOVE(r.op_state.receiver), request);
-                            }
+
+                            std::cerr << "continuation notified\n";
+
+                            MPI_Request_free(&cont_request);
+                            std::cerr << "request freed\n";
+
+                            PIKA_ASSERT(poll_request(request));
+
+                            set_value_error_helper(
+                                status, PIKA_MOVE(r.op_state.receiver), MPI_REQUEST_NULL);
+
+                            // TODO: This is disabled only for testing of MPI continuations. The
+                            // final version should use the trigger MPI receiver to wait for the
+                            // request.
+
+                            // if (poll_request(request))
+                            // {
+                            // #ifdef PIKA_HAVE_APEX
+                            //                             apex::scoped_timer apex_invoke("pika::mpi::trigger");
+                            // #endif
+                            //     PIKA_DETAIL_DP(mpi_tran<7>,
+                            //         debug(str<>("dispatch_mpi_recv"), "eager poll ok",
+                            //             detail::stream_name(r.op_state.stream_), ptr(request)));
+                            //     // calls set_value(request), or set_error(mpi_exception(status))
+                            //     set_value_error_helper(
+                            //         status, PIKA_MOVE(r.op_state.receiver), MPI_REQUEST_NULL);
+                            // }
+                            // else
+                            // {
+                            //     set_value_error_helper(
+                            //         status, PIKA_MOVE(r.op_state.receiver), request);
+                            // }
                         },
                         [&](std::exception_ptr ep) {
                             ex::set_error(PIKA_MOVE(r.op_state.receiver), PIKA_MOVE(ep));

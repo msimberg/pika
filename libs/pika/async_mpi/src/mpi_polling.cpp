@@ -416,6 +416,12 @@ namespace pika::mpi::experimental {
             using pika::threads::detail::polling_status;
             using namespace pika::mpi::experimental::detail;
 
+            {
+                // Make sure MPI makes progress on requests that are not polled by pika
+                int flag;
+                MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &flag, MPI_STATUS_IGNORE);
+            }
+
             // If a thread is already polling and found a completion,
             // it first places it on the ready requests queue and any thread
             // can invoke the callback without being under lock
