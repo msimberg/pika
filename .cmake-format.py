@@ -456,12 +456,13 @@ with section("parse"):
         "pika_check_for_cxx11_std_atomic": {"pargs": {"nargs": 0}},
         "pika_check_for_cxx11_std_atomic_128bit": {"pargs": {"nargs": 0}},
         "pika_check_for_cxx11_std_quick_exit": {"pargs": {"nargs": 0}},
-        "pika_check_for_cxx11_std_shared_ptr_lwg3018": {"pargs": {"nargs": 0}},
-        "pika_check_for_cxx17_aligned_new": {"pargs": {"nargs": 0}},
-        "pika_check_for_cxx17_hardware_destructive_interference_size": {
-            "pargs": {"nargs": 0}
-        },
-        "pika_check_for_libfun_std_experimental_optional": {"pargs": {"nargs": 0}},
+        "pika_check_for_c11_aligned_alloc": {"pargs": {"nargs": 0}},
+        "pika_check_for_cxx17_std_aligned_alloc": {"pargs": {"nargs": 0}},
+        "pika_check_for_cxx17_copy_elision": {"pargs": {"nargs": 0}},
+        "pika_check_for_cxx17_memory_resource": {"pargs": {"nargs": 0}},
+        "pika_check_for_cxx20_no_unique_address_attribute": {"pargs": {"nargs": 0}},
+        "pika_check_for_cxx20_trivial_virtual_destructor": {"pargs": {"nargs": 0}},
+        "pika_check_for_cxx_lambda_capture_decltype": {"pargs": {"nargs": 0}},
         "pika_check_for_unistd_h": {"pargs": {"nargs": 0}},
         "pika_collect_usage_requirements": {
             "kwargs": {"EXCLUDE": "+"},

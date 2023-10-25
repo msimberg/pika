@@ -256,15 +256,6 @@ function(pika_check_for_unistd_h)
 endfunction()
 
 # ##############################################################################
-function(pika_check_for_libfun_std_experimental_optional)
-  pika_add_config_test(
-    PIKA_WITH_LIBFUN_EXPERIMENTAL_OPTIONAL
-    SOURCE cmake/tests/libfun_std_experimental_optional.cpp
-    FILE ${ARGN}
-  )
-endfunction()
-
-# ##############################################################################
 function(pika_check_for_cxx11_std_atomic)
   # Make sure PIKA_HAVE_LIBATOMIC is removed from the cache if necessary
   if(NOT PIKA_WITH_CXX11_ATOMIC)
@@ -351,15 +342,6 @@ function(pika_check_for_cxx11_std_atomic_128bit)
 endfunction()
 
 # ##############################################################################
-function(pika_check_for_cxx11_std_shared_ptr_lwg3018)
-  pika_add_config_test(
-    PIKA_WITH_CXX11_SHARED_PTR_LWG3018
-    SOURCE cmake/tests/cxx11_std_shared_ptr_lwg3018.cpp
-    FILE ${ARGN}
-  )
-endfunction()
-
-# ##############################################################################
 function(pika_check_for_c11_aligned_alloc)
   pika_add_config_test(
     PIKA_WITH_C11_ALIGNED_ALLOC
@@ -389,34 +371,6 @@ function(pika_check_for_cxx11_std_quick_exit)
   pika_add_config_test(
     PIKA_WITH_CXX11_STD_QUICK_EXIT
     SOURCE cmake/tests/cxx11_std_quick_exit.cpp
-    FILE ${ARGN}
-  )
-endfunction()
-
-# ##############################################################################
-function(pika_check_for_cxx17_aligned_new)
-  pika_add_config_test(
-    PIKA_WITH_CXX17_ALIGNED_NEW
-    SOURCE cmake/tests/cxx17_aligned_new.cpp
-    FILE ${ARGN}
-    REQUIRED
-  )
-endfunction()
-
-# ##############################################################################
-function(pika_check_for_cxx17_std_transform_scan)
-  pika_add_config_test(
-    PIKA_WITH_CXX17_STD_TRANSFORM_SCAN_ALGORITHMS
-    SOURCE cmake/tests/cxx17_std_transform_scan_algorithms.cpp
-    FILE ${ARGN}
-  )
-endfunction()
-
-# ##############################################################################
-function(pika_check_for_cxx17_std_scan)
-  pika_add_config_test(
-    PIKA_WITH_CXX17_STD_SCAN_ALGORITHMS
-    SOURCE cmake/tests/cxx17_std_scan_algorithms.cpp
     FILE ${ARGN}
   )
 endfunction()

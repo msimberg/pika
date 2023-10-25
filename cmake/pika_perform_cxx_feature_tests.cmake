@@ -25,10 +25,6 @@ function(pika_perform_cxx_feature_tests)
     DEFINITIONS PIKA_HAVE_CXX11_STD_QUICK_EXIT
   )
 
-  pika_check_for_cxx11_std_shared_ptr_lwg3018(
-    DEFINITIONS PIKA_HAVE_CXX11_STD_SHARED_PTR_LWG3018
-  )
-
   pika_check_for_c11_aligned_alloc(DEFINITIONS PIKA_HAVE_C11_ALIGNED_ALLOC)
 
   pika_check_for_cxx17_std_aligned_alloc(
@@ -38,8 +34,6 @@ function(pika_perform_cxx_feature_tests)
   pika_check_for_cxx17_std_execution_policies(
     DEFINITIONS PIKA_HAVE_CXX17_STD_EXECUTION_POLICIES
   )
-
-  pika_check_for_cxx17_aligned_new(DEFINITIONS PIKA_HAVE_CXX17_ALIGNED_NEW)
 
   pika_check_for_cxx17_copy_elision(DEFINITIONS PIKA_HAVE_CXX17_COPY_ELISION)
 
