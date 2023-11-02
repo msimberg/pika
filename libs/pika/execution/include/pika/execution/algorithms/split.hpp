@@ -33,11 +33,13 @@
 # include <pika/type_support/pack.hpp>
 
 # include <atomic>
+# include <chrono>
 # include <cstddef>
 # include <exception>
 # include <memory>
 # include <mutex>
 # include <optional>
+# include <thread>
 # include <tuple>
 # include <type_traits>
 # include <utility>
@@ -259,6 +261,8 @@ namespace pika::split_detail {
 
                 predecessor_done = true;
 
+                std::this_thread::sleep_for(std::chrono::seconds(3));
+
                 {
                     // We require taking the lock here to synchronize with
                     // threads attempting to add continuations to the vector
@@ -429,6 +433,7 @@ namespace pika::split_detail {
                 pika::execution::experimental::start_t, operation_state& os) noexcept
             {
                 os.state->start();
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 os.state->add_continuation(PIKA_MOVE(os.receiver));
             }
         };
