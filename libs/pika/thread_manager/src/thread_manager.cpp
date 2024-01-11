@@ -866,8 +866,14 @@ namespace pika::threads::detail {
     void thread_manager::wait()
     {
         pika::util::yield_while([]() {
-            return pika::threads::detail::get_global_activity_count() >
-                (threads::detail::get_self_ptr() != nullptr ? 1 : 0);
+            if (auto* p = threads::detail::get_self_ptr())
+            {
+                pika::threads::detail::get_thread_id_data(p->get_thread_id())
+                    ->get_scheduler_base()
+                    ->cleanup_terminated(true);
+                return pika::threads::detail::get_global_activity_count() > 1;
+            }
+            else { return pika::threads::detail::get_global_activity_count() > 0; }
         });
     }
 

@@ -18,6 +18,7 @@
 #include <pika/schedulers/maintain_queue_wait_times.hpp>
 #include <pika/schedulers/queue_helpers.hpp>
 #include <pika/thread_support/unlock_guard.hpp>
+#include <pika/threading_base/detail/global_activity_count.hpp>
 #include <pika/threading_base/scheduler_base.hpp>
 #include <pika/threading_base/thread_data.hpp>
 #include <pika/threading_base/thread_data_stackful.hpp>
@@ -219,17 +220,26 @@ namespace pika::threads::detail {
 
                 if (PIKA_UNLIKELY(!p.second))
                 {
-                    --addfrom->new_tasks_count_.data_;
+                    if (--addfrom->new_tasks_count_.data_ < 2)
+                    {
+                        pika::threads::detail::decrement_global_activity_count();
+                    }
                     lk.unlock();
                     PIKA_THROW_EXCEPTION(pika::error::out_of_memory, "thread_queue::add_new",
                         "Couldn't add new thread to the thread map");
                     return 0;
                 }
 
-                ++thread_map_count_;
+                if (++thread_map_count_ <= 2)
+                {
+                    pika::threads::detail::increment_global_activity_count();
+                }
 
                 // Decrement only after thread_map_count_ has been incremented
-                --addfrom->new_tasks_count_.data_;
+                if (--addfrom->new_tasks_count_.data_ == 0)
+                {
+                    pika::threads::detail::decrement_global_activity_count();
+                }
 
                 // insert the thread into the work-items queue assuming it is
                 // in pending state, thread would go out of scope otherwise
@@ -342,7 +352,10 @@ namespace pika::threads::detail {
                     if (thread_map_.erase(tid) != 0)
                     {
                         recycle_thread(tid);
-                        --thread_map_count_;
+                        if (--thread_map_count_ < 2)
+                        {
+                            pika::threads::detail::decrement_global_activity_count();
+                        }
                         PIKA_ASSERT(thread_map_count_ >= 0);
                     }
                 }
@@ -371,7 +384,10 @@ namespace pika::threads::detail {
                     if (thread_map_.erase(tid) != 0)
                     {
                         recycle_thread(tid);
-                        --thread_map_count_;
+                        if (--thread_map_count_ < 2)
+                        {
+                            pika::threads::detail::decrement_global_activity_count();
+                        }
                         PIKA_ASSERT(thread_map_count_ >= 0);
                     }
                     --delete_count;
@@ -612,7 +628,11 @@ namespace pika::threads::detail {
                             "Couldn't add new thread to the map of threads");
                         return;
                     }
-                    ++thread_map_count_;
+
+                    if (++thread_map_count_ <= 2)
+                    {
+                        pika::threads::detail::increment_global_activity_count();
+                    }
 
                     // this thread has to be in the map now
                     PIKA_ASSERT(thread_map_.find(thrd.noref()) != thread_map_.end());
@@ -652,7 +672,10 @@ namespace pika::threads::detail {
 
             // do not execute the work, but register a task description for
             // later thread creation
-            ++new_tasks_count_.data_;
+            if (++new_tasks_count_.data_ <= 1)
+            {
+                pika::threads::detail::increment_global_activity_count();
+            }
 
             task_description* td = task_description_alloc_.allocate(1);
 #ifdef PIKA_HAVE_THREAD_QUEUE_WAITTIME
@@ -707,17 +730,31 @@ namespace pika::threads::detail {
                 }
 #endif
 
-                bool finish = count == ++new_tasks_count_.data_;
+                auto current_new_tasks_count = ++new_tasks_count_.data_;
+                if (current_new_tasks_count <= 1)
+                {
+                    pika::threads::detail::increment_global_activity_count();
+                }
+                bool finish = count == current_new_tasks_count;
 
                 // Decrement only after the local new_tasks_count_ has
                 // been incremented
-                --src->new_tasks_count_.data_;
+                if (--src->new_tasks_count_.data_ == 0)
+                {
+                    pika::threads::detail::decrement_global_activity_count();
+                }
 
                 if (new_tasks_.push(task))
                 {
                     if (finish) break;
                 }
-                else { --new_tasks_count_.data_; }
+                else
+                {
+                    if (--new_tasks_count_.data_ < 0)
+                    {
+                        pika::threads::detail::decrement_global_activity_count();
+                    }
+                }
             }
         }
 

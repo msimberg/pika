@@ -261,7 +261,7 @@ namespace pika::threads::detail {
         void create_thread(threads::detail::thread_init_data& data,
             threads::detail::thread_id_ref_type* id, error_code& ec) override
         {
-            pika::threads::detail::increment_global_activity_count();
+            // pika::threads::detail::increment_global_activity_count();
 
             std::size_t num_thread =
                 data.schedulehint.mode == execution::thread_schedule_hint_mode::thread ?
@@ -471,7 +471,7 @@ namespace pika::threads::detail {
             PIKA_ASSERT(thrd->get_scheduler_base() == this);
             thrd->get_queue<thread_queue_type>().destroy_thread(thrd);
 
-            pika::threads::detail::decrement_global_activity_count();
+            // pika::threads::detail::decrement_global_activity_count();
         }
 
         ///////////////////////////////////////////////////////////////////////
