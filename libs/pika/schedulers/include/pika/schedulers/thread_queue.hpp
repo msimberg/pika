@@ -132,35 +132,35 @@ namespace pika::threads::detail {
 
             std::ptrdiff_t const stacksize = data.scheduler_base->get_stack_size(data.stacksize);
 
-            thread_heap_type* heap = nullptr;
+            //            thread_heap_type* heap = nullptr;
 
-            if (stacksize == parameters_.small_stacksize_) { heap = &thread_heap_small_; }
-            else if (stacksize == parameters_.medium_stacksize_) { heap = &thread_heap_medium_; }
-            else if (stacksize == parameters_.large_stacksize_) { heap = &thread_heap_large_; }
-            else if (stacksize == parameters_.huge_stacksize_) { heap = &thread_heap_huge_; }
-            else if (stacksize == parameters_.nostack_stacksize_) { heap = &thread_heap_nostack_; }
-            PIKA_ASSERT(heap);
+            //             if (stacksize == parameters_.small_stacksize_) { heap = &thread_heap_small_; }
+            //             else if (stacksize == parameters_.medium_stacksize_) { heap = &thread_heap_medium_; }
+            //             else if (stacksize == parameters_.large_stacksize_) { heap = &thread_heap_large_; }
+            //             else if (stacksize == parameters_.huge_stacksize_) { heap = &thread_heap_huge_; }
+            //             else if (stacksize == parameters_.nostack_stacksize_) { heap = &thread_heap_nostack_; }
+            //             PIKA_ASSERT(heap);
 
-            if (data.initial_state ==
-                    threads::detail::thread_schedule_state::pending_do_not_schedule ||
-                data.initial_state == threads::detail::thread_schedule_state::pending_boost)
-            {
-                data.initial_state = threads::detail::thread_schedule_state::pending;
-            }
+            //             if (data.initial_state ==
+            //                     threads::detail::thread_schedule_state::pending_do_not_schedule ||
+            //                 data.initial_state == threads::detail::thread_schedule_state::pending_boost)
+            //             {
+            //                 data.initial_state = threads::detail::thread_schedule_state::pending;
+            //             }
 
-            // ASAN gets confused by reusing threads/stacks
-#if !defined(PIKA_HAVE_ADDRESS_SANITIZER)
+            //             // ASAN gets confused by reusing threads/stacks
+            // #if !defined(PIKA_HAVE_ADDRESS_SANITIZER)
 
-            // Check for an unused thread object.
-            if (!heap->empty())
-            {
-                // Take ownership of the thread object and rebind it.
-                thrd = heap->back();
-                heap->pop_back();
-                threads::detail::get_thread_id_data(thrd)->rebind(data);
-            }
-            else
-#endif
+            //             // Check for an unused thread object.
+            //             if (!heap->empty())
+            //             {
+            //                 // Take ownership of the thread object and rebind it.
+            //                 thrd = heap->back();
+            //                 heap->pop_back();
+            //                 threads::detail::get_thread_id_data(thrd)->rebind(data);
+            //             }
+            //             else
+            // #endif
             {
                 pika::detail::unlock_guard<Lock> ull(lk);
 
@@ -291,26 +291,26 @@ namespace pika::threads::detail {
 
         void recycle_thread(threads::detail::thread_id_type thrd)
         {
-            std::ptrdiff_t stacksize = threads::detail::get_thread_id_data(thrd)->get_stack_size();
+            // std::ptrdiff_t stacksize = threads::detail::get_thread_id_data(thrd)->get_stack_size();
 
-            if (stacksize == parameters_.small_stacksize_) { thread_heap_small_.push_back(thrd); }
-            else if (stacksize == parameters_.medium_stacksize_)
-            {
-                thread_heap_medium_.push_back(thrd);
-            }
-            else if (stacksize == parameters_.large_stacksize_)
-            {
-                thread_heap_large_.push_back(thrd);
-            }
-            else if (stacksize == parameters_.huge_stacksize_)
-            {
-                thread_heap_huge_.push_back(thrd);
-            }
-            else if (stacksize == parameters_.nostack_stacksize_)
-            {
-                thread_heap_nostack_.push_back(thrd);
-            }
-            else { PIKA_ASSERT_MSG(false, fmt::format("Invalid stack size {}", stacksize)); }
+            // if (stacksize == parameters_.small_stacksize_) { thread_heap_small_.push_back(thrd); }
+            // else if (stacksize == parameters_.medium_stacksize_)
+            // {
+            //     thread_heap_medium_.push_back(thrd);
+            // }
+            // else if (stacksize == parameters_.large_stacksize_)
+            // {
+            //     thread_heap_large_.push_back(thrd);
+            // }
+            // else if (stacksize == parameters_.huge_stacksize_)
+            // {
+            //     thread_heap_huge_.push_back(thrd);
+            // }
+            // else if (stacksize == parameters_.nostack_stacksize_)
+            // {
+            //     thread_heap_nostack_.push_back(thrd);
+            // }
+            // else { PIKA_ASSERT_MSG(false, fmt::format("Invalid stack size {}", stacksize)); }
         }
 
     public:
@@ -321,82 +321,84 @@ namespace pika::threads::detail {
         /// to be deleted.
         bool cleanup_terminated_locked(bool delete_all = false)
         {
-#ifdef PIKA_HAVE_THREAD_CREATION_AND_CLEANUP_RATES
-            chrono::detail::tick_counter tc(cleanup_terminated_time_);
-#endif
+            // #ifdef PIKA_HAVE_THREAD_CREATION_AND_CLEANUP_RATES
+            //             chrono::detail::tick_counter tc(cleanup_terminated_time_);
+            // #endif
 
-            if (terminated_items_count_.load(std::memory_order_acquire) == 0) return true;
+            //             if (terminated_items_count_.load(std::memory_order_acquire) == 0) return true;
 
-            if (delete_all)
-            {
-                // delete all threads
-                threads::detail::thread_data* todelete;
-                while (terminated_items_.pop(todelete))
-                {
-                    threads::detail::thread_id_type tid(todelete);
-                    --terminated_items_count_;
+            //             if (delete_all)
+            //             {
+            //                 // delete all threads
+            //                 threads::detail::thread_data* todelete;
+            //                 while (terminated_items_.pop(todelete))
+            //                 {
+            //                     threads::detail::thread_id_type tid(todelete);
+            //                     --terminated_items_count_;
 
-                    // this thread has to be in this map
-                    PIKA_ASSERT(thread_map_.find(tid) != thread_map_.end());
+            //                     // this thread has to be in this map
+            //                     PIKA_ASSERT(thread_map_.find(tid) != thread_map_.end());
 
-                    if (thread_map_.erase(tid) != 0)
-                    {
-                        recycle_thread(tid);
-                        --thread_map_count_;
-                        PIKA_ASSERT(thread_map_count_ >= 0);
-                    }
-                }
-            }
-            else
-            {
-                // delete only this many threads
-                std::int64_t delete_count =
-                    (std::min)(static_cast<std::int64_t>(terminated_items_count_ / 10),
-                        static_cast<std::int64_t>(parameters_.max_delete_count_));
+            //                     if (thread_map_.erase(tid) != 0)
+            //                     {
+            //                         recycle_thread(tid);
+            //                         --thread_map_count_;
+            //                         PIKA_ASSERT(thread_map_count_ >= 0);
+            //                     }
+            //                 }
+            //             }
+            //             else
+            //             {
+            //                 // delete only this many threads
+            //                 std::int64_t delete_count =
+            //                     (std::min)(static_cast<std::int64_t>(terminated_items_count_ / 10),
+            //                         static_cast<std::int64_t>(parameters_.max_delete_count_));
 
-                // delete at least this many threads
-                delete_count = (std::max)(
-                    delete_count, static_cast<std::int64_t>(parameters_.min_delete_count_));
+            //                 // delete at least this many threads
+            //                 delete_count = (std::max)(
+            //                     delete_count, static_cast<std::int64_t>(parameters_.min_delete_count_));
 
-                threads::detail::thread_data* todelete;
-                while (delete_count && terminated_items_.pop(todelete))
-                {
-                    threads::detail::thread_id_type tid(todelete);
-                    --terminated_items_count_;
+            //                 threads::detail::thread_data* todelete;
+            //                 while (delete_count && terminated_items_.pop(todelete))
+            //                 {
+            //                     threads::detail::thread_id_type tid(todelete);
+            //                     --terminated_items_count_;
 
-                    // this thread has to be in this map, except if it has changed
-                    // its priority, then it could be elsewhere
-                    PIKA_ASSERT(thread_map_.find(tid) != thread_map_.end());
+            //                     // this thread has to be in this map, except if it has changed
+            //                     // its priority, then it could be elsewhere
+            //                     PIKA_ASSERT(thread_map_.find(tid) != thread_map_.end());
 
-                    if (thread_map_.erase(tid) != 0)
-                    {
-                        recycle_thread(tid);
-                        --thread_map_count_;
-                        PIKA_ASSERT(thread_map_count_ >= 0);
-                    }
-                    --delete_count;
-                }
-            }
-            return terminated_items_count_.load(std::memory_order_acquire) == 0;
+            //                     if (thread_map_.erase(tid) != 0)
+            //                     {
+            //                         recycle_thread(tid);
+            //                         --thread_map_count_;
+            //                         PIKA_ASSERT(thread_map_count_ >= 0);
+            //                     }
+            //                     --delete_count;
+            //                 }
+            //             }
+            //            return terminated_items_count_.load(std::memory_order_acquire) == 0;
+            return true;
         }
 
     public:
         bool cleanup_terminated(bool delete_all = false)
         {
-            if (terminated_items_count_.load(std::memory_order_acquire) == 0) return true;
+            // if (terminated_items_count_.load(std::memory_order_acquire) == 0) return true;
 
-            if (delete_all)
-            {
-                // do not lock mutex while deleting all threads, do it piece-wise
-                while (true)
-                {
-                    std::lock_guard<mutex_type> lk(mtx_);
-                    if (cleanup_terminated_locked(false)) { return true; }
-                }
-            }
+            // if (delete_all)
+            // {
+            //     // do not lock mutex while deleting all threads, do it piece-wise
+            //     while (true)
+            //     {
+            //         std::lock_guard<mutex_type> lk(mtx_);
+            //         if (cleanup_terminated_locked(false)) { return true; }
+            //     }
+            // }
 
-            std::lock_guard<mutex_type> lk(mtx_);
-            return cleanup_terminated_locked(false);
+            // std::lock_guard<mutex_type> lk(mtx_);
+            // return cleanup_terminated_locked(false);
+            return true;
         }
 
         thread_queue(
@@ -408,21 +410,21 @@ namespace pika::threads::detail {
           , work_items_wait_(0)
           , work_items_wait_count_(0)
 #endif
-          , terminated_items_(128)
-          , terminated_items_count_(0)
+          // , terminated_items_(128)
+          // , terminated_items_count_(0)
           , new_tasks_(128)
 #ifdef PIKA_HAVE_THREAD_QUEUE_WAITTIME
           , new_tasks_wait_(0)
           , new_tasks_wait_count_(0)
 #endif
-          , thread_heap_small_()
-          , thread_heap_medium_()
-          , thread_heap_large_()
-          , thread_heap_huge_()
-          , thread_heap_nostack_()
+        // , thread_heap_small_()
+        // , thread_heap_medium_()
+        // , thread_heap_large_()
+        // , thread_heap_huge_()
+        // , thread_heap_nostack_()
 #ifdef PIKA_HAVE_THREAD_CREATION_AND_CLEANUP_RATES
           , add_new_time_(0)
-          , cleanup_terminated_time_(0)
+        // , cleanup_terminated_time_(0)
 #endif
 #ifdef PIKA_HAVE_THREAD_STEALING_COUNTS
           , pending_misses_(0)
@@ -441,15 +443,15 @@ namespace pika::threads::detail {
 
         ~thread_queue()
         {
-            for (auto t : thread_heap_small_) deallocate(threads::detail::get_thread_id_data(t));
+            // for (auto t : thread_heap_small_) deallocate(threads::detail::get_thread_id_data(t));
 
-            for (auto t : thread_heap_medium_) deallocate(threads::detail::get_thread_id_data(t));
+            // for (auto t : thread_heap_medium_) deallocate(threads::detail::get_thread_id_data(t));
 
-            for (auto t : thread_heap_large_) deallocate(threads::detail::get_thread_id_data(t));
+            // for (auto t : thread_heap_large_) deallocate(threads::detail::get_thread_id_data(t));
 
-            for (auto t : thread_heap_huge_) deallocate(threads::detail::get_thread_id_data(t));
+            // for (auto t : thread_heap_huge_) deallocate(threads::detail::get_thread_id_data(t));
 
-            for (auto t : thread_heap_nostack_) deallocate(threads::detail::get_thread_id_data(t));
+            // for (auto t : thread_heap_nostack_) deallocate(threads::detail::get_thread_id_data(t));
         }
 
 #ifdef PIKA_HAVE_THREAD_CREATION_AND_CLEANUP_RATES
@@ -460,7 +462,8 @@ namespace pika::threads::detail {
 
         std::uint64_t get_cleanup_time(bool reset)
         {
-            return ::pika::detail::get_and_reset_value(cleanup_terminated_time_, reset);
+            // return ::pika::detail::get_and_reset_value(cleanup_terminated_time_, reset);
+            return 0;
         }
 #endif
 
@@ -785,15 +788,23 @@ namespace pika::threads::detail {
         /// Destroy the passed thread as it has been terminated
         void destroy_thread(threads::detail::thread_data* thrd)
         {
-            PIKA_ASSERT(&thrd->get_queue<thread_queue>() == this);
+            threads::detail::thread_id_type tid(thrd);
 
-            terminated_items_.push(thrd);
+            std::lock_guard<mutex_type> lk(mtx_);
+            PIKA_ASSERT(thread_map_.find(tid) != thread_map_.end());
+            thread_map_.erase(tid);
+            --thread_map_count_;
+            PIKA_ASSERT(thread_map_count_ >= 0);
+            deallocate(thrd);
+            // PIKA_ASSERT(&thrd->get_queue<thread_queue>() == this);
 
-            std::int64_t count = ++terminated_items_count_;
-            if (count > parameters_.max_terminated_threads_)
-            {
-                cleanup_terminated(true);    // clean up all terminated threads
-            }
+            // terminated_items_.push(thrd);
+
+            // std::int64_t count = ++terminated_items_count_;
+            // if (count > parameters_.max_terminated_threads_)
+            // {
+            //     cleanup_terminated(true);    // clean up all terminated threads
+            // }
         }
 
         ///////////////////////////////////////////////////////////////////////
@@ -1015,39 +1026,39 @@ namespace pika::threads::detail {
         ///////////////////////////////////////////////////////////////////////
         void on_start_thread(std::size_t /* num_thread */)
         {
-            thread_heap_small_.reserve(parameters_.init_threads_count_);
-            thread_heap_medium_.reserve(parameters_.init_threads_count_);
-            thread_heap_large_.reserve(parameters_.init_threads_count_);
-            thread_heap_huge_.reserve(parameters_.init_threads_count_);
+            // thread_heap_small_.reserve(parameters_.init_threads_count_);
+            // thread_heap_medium_.reserve(parameters_.init_threads_count_);
+            // thread_heap_large_.reserve(parameters_.init_threads_count_);
+            // thread_heap_huge_.reserve(parameters_.init_threads_count_);
 
             // Pre-allocate init_threads_count threads, with accompanying stack,
             // with the default stack size
-            static_assert(
-                execution::thread_stacksize::default_ == execution::thread_stacksize::small_,
-                "This assumes that the default stacksize is \"small_\". If the default changes, so "
-                "should this code. If this static_assert fails you've most likely changed the "
-                "default without changing the code here.");
+            // static_assert(
+            //     execution::thread_stacksize::default_ == execution::thread_stacksize::small_,
+            //     "This assumes that the default stacksize is \"small_\". If the default changes, so "
+            //     "should this code. If this static_assert fails you've most likely changed the "
+            //     "default without changing the code here.");
 
-            std::lock_guard<mutex_type> lk(mtx_);
-            for (std::int64_t i = 0; i < parameters_.init_threads_count_; ++i)
-            {
-                // We don't care about the init parameters since this thread
-                // will be rebound once it is actually used
-                threads::detail::thread_init_data init_data;
+            // std::lock_guard<mutex_type> lk(mtx_);
+            // for (std::int64_t i = 0; i < parameters_.init_threads_count_; ++i)
+            // {
+            //     // We don't care about the init parameters since this thread
+            //     // will be rebound once it is actually used
+            //     threads::detail::thread_init_data init_data;
 
-                // We start the reference count at zero since the thread goes
-                // immediately into the list of recycled threads
-                threads::detail::thread_data* p =
-                    threads::detail::thread_data_stackful::create(init_data, this,
-                        parameters_.small_stacksize_, threads::detail::thread_id_addref::no);
-                PIKA_ASSERT(p);
+            //     // We start the reference count at zero since the thread goes
+            //     // immediately into the list of recycled threads
+            //     threads::detail::thread_data* p =
+            //         threads::detail::thread_data_stackful::create(init_data, this,
+            //             parameters_.small_stacksize_, threads::detail::thread_id_addref::no);
+            //     PIKA_ASSERT(p);
 
-                // We initialize the stack eagerly
-                p->init();
+            //     // We initialize the stack eagerly
+            //     p->init();
 
-                // Finally, store the thread for later use
-                thread_heap_small_.emplace_back(p);
-            }
+            //     // Finally, store the thread for later use
+            //     thread_heap_small_.emplace_back(p);
+            // }
         }
         void on_stop_thread(std::size_t /* num_thread */) {}
         void on_error(std::size_t /* num_thread */, std::exception_ptr const& /* e */) {}
@@ -1084,11 +1095,11 @@ namespace pika::threads::detail {
         std::atomic<std::int64_t> new_tasks_wait_count_;
 #endif
 
-        thread_heap_type thread_heap_small_;
-        thread_heap_type thread_heap_medium_;
-        thread_heap_type thread_heap_large_;
-        thread_heap_type thread_heap_huge_;
-        thread_heap_type thread_heap_nostack_;
+        // thread_heap_type thread_heap_small_;
+        // thread_heap_type thread_heap_medium_;
+        // thread_heap_type thread_heap_large_;
+        // thread_heap_type thread_heap_huge_;
+        // thread_heap_type thread_heap_nostack_;
 
 #ifdef PIKA_HAVE_THREAD_CREATION_AND_CLEANUP_RATES
         std::uint64_t add_new_time_;
