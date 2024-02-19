@@ -41,10 +41,6 @@ namespace pika::execution::detail {
     void agent_ref::spin_k(std::size_t k, const char* desc)
     {
         PIKA_ASSERT(*this == pika::execution::this_thread::detail::agent());
-        // verify that there are no more registered locks for this OS-thread
-#ifdef PIKA_HAVE_VERIFY_LOCKS
-        util::verify_no_locks();
-#endif
         impl_->spin_k(k, desc);
     }
 

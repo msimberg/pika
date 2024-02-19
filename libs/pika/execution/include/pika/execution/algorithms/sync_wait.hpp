@@ -169,8 +169,6 @@ namespace pika::sync_wait_detail {
         {
             std::unique_lock<mutex_type> l(state.mtx);
             state.set_called = true;
-            [[maybe_unused]] pika::util::ignore_while_checking<decltype(l)> il(&l);
-
             state.cond_var.notify_one();
         }
 
