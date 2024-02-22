@@ -11,10 +11,10 @@ on:
   merge_group:
   pull_request:
   push:
-    branches:
-      # Development and release branches
-      - main
-      - release**
+    # branches:
+    #   # Development and release branches
+    #   - main
+    #   - release**
 
 jobs:
   build:
@@ -23,6 +23,11 @@ jobs:
     container: pikaorg/pika-ci-base:22
 
     steps:
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        timeout-minutes: 120
+        with:
+          detached: true
       - uses: actions/checkout@v4
       - name: Update apt repositories for ccache
         run: apt update
