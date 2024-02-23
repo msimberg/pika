@@ -11,10 +11,6 @@ on:
   merge_group:
   pull_request:
   push:
-    branches:
-      # Development and release branches
-      - main
-      - release**
 
 jobs:
   build:
@@ -61,7 +57,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-            export TSAN_OPTIONS=suppressions=$PWD/tools/tsan.supp
+            export TSAN_OPTIONS=memory_limit_mb=2048:suppressions=$PWD/tools/tsan.supp
             cd build
             ctest \
               --timeout 120 \
@@ -72,7 +68,7 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-            export TSAN_OPTIONS=suppressions=$PWD/tools/tsan.supp
+            export TSAN_OPTIONS=memory_limit_mb=4096:suppressions=$PWD/tools/tsan.supp
             cd build
             ctest \
               --timeout 120 \
