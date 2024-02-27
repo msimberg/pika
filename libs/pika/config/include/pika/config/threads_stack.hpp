@@ -33,7 +33,7 @@
 
 #if !defined(PIKA_SMALL_STACK_SIZE)
 #  if defined(__has_feature)
-#    if __has_feature(address_sanitizer)
+#    if __has_feature(address_sanitizer) || __has_feature(thread_sanitizer)
 #      define PIKA_SMALL_STACK_SIZE  0x40000       // 256kByte
 #    endif
 #  endif
@@ -51,6 +51,14 @@
 #      else
 #         define PIKA_SMALL_STACK_SIZE  0x10000        // 64kByte
 #      endif
+#    endif
+#  endif
+#endif
+
+#if !defined(PIKA_MEDIUM_STACK_SIZE)
+#  if defined(__has_feature)
+#    if __has_feature(address_sanitizer) || __has_feature(thread_sanitizer)
+#      define PIKA_MEDIUM_STACK_SIZE  0x100000       // 1MByte
 #    endif
 #  endif
 #endif
