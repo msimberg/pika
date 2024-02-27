@@ -152,7 +152,7 @@ namespace pika::threads::detail {
             }
 
             // ASAN gets confused by reusing threads/stacks
-# if !defined(PIKA_HAVE_ADDRESS_SANITIZER)
+# if !defined(PIKA_HAVE_ADDRESS_SANITIZER) && !defined(PIKA_HAVE_THREAD_SANITIZER)
 
             // Check for an unused thread object.
             if (!heap->empty())
