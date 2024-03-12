@@ -165,7 +165,7 @@ namespace pika::execution::experimental {
     template <typename Sender>
     struct is_sender
       : std::integral_constant<bool,
-            std::is_move_constructible<std::decay_t<Sender>>::value &&
+            std::is_move_constructible_v<std::decay_t<Sender>> &&
                 detail::specialized<std::decay_t<Sender>>(nullptr)>
     {
     };
@@ -186,11 +186,11 @@ namespace pika::execution::experimental {
 
         template <typename Executor, typename F>
         struct is_executor_of_base_impl<Executor, F,
-            std::enable_if_t<std::is_invocable<std::decay_t<F>&>::value &&
-                std::is_constructible<std::decay_t<F>, F>::value &&
-                std::is_destructible<std::decay_t<F>>::value &&
-                std::is_move_constructible<std::decay_t<F>>::value &&
-                std::is_copy_constructible<Executor>::value &&
+            std::enable_if_t<std::is_invocable_v<std::decay_t<F>&> &&
+                std::is_constructible_v<std::decay_t<F>, F> &&
+                std::is_destructible_v<std::decay_t<F>> &&
+                std::is_move_constructible_v<std::decay_t<F>> &&
+                std::is_copy_constructible_v<Executor> &&
                 pika::detail::is_equality_comparable_v<Executor>>> : std::true_type
         {
         };
