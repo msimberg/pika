@@ -402,7 +402,7 @@ namespace pika::execution::experimental {
     inline constexpr bool is_scheduler_v = is_scheduler<Scheduler>::value;
 
     template <typename S, typename R>
-    using connect_result_t = std::invoke_result_t<connect_t, S, R>;
+    using connect_result_t = decltype(connect_t{}(std::declval<S>(), std::declval<R>()));
 
     struct empty_env
     {
