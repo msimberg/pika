@@ -470,6 +470,8 @@ jobs:
           name: Installing
           command: |
               ./bin/hello_world --pika:bind=none
+              ./bin/hello_world --pika:bind=none --pika:print-bind
+              hwloc-bind 0x3 ./bin/hello_world --pika:bind=none --pika:print-bind
               ninja -j2 install
           working_directory: /pika/build
           when: always
