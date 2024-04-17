@@ -11,4 +11,4 @@ race:boost::lockfree::queue*
 race:pika::concurrency::detail::ConcurrentQueue*
 
 # https://github.com/pika-org/pika/issues/989
-race:pika::experimental::base_channel_mpsc
+# race:pika::experimental::base_channel_mpsc
