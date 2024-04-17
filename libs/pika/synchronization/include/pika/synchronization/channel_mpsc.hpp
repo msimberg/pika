@@ -128,7 +128,7 @@ namespace pika::experimental {
 
             buffer_[tail] = PIKA_MOVE(t);
             if (++tail >= size_) { tail = 0; }
-            tail_.data_.tail_.store(tail, std::memory_order_relaxed);
+            tail_.data_.tail_.store(tail, std::memory_order_release);
 
             return true;
         }
