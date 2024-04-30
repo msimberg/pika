@@ -40,6 +40,8 @@ jobs:
             apt-get remove --yes mpi-default-dev
             apt-get autoremove --yes
             apt-get install --no-install-recommends --yes libmpich-dev
+            # TEMP: test boost context with sanitizers
+            apt-get install --no-install-recommends --yes libboost-context-dev
       - name: Configure
         shell: bash
         run: |
@@ -51,6 +53,7 @@ jobs:
                 -DCMAKE_BUILD_TYPE=Debug \
                 -DPIKA_WITH_MALLOC=system \
                 -DPIKA_WITH_MPI=ON \
+                -DPIKA_WITH_BOOST_CONTEXT=ON \
                 -DPIKA_WITH_EXAMPLES=ON \
                 -DPIKA_WITH_TESTS=ON \
                 -DPIKA_WITH_TESTS_EXAMPLES=ON \
@@ -59,7 +62,7 @@ jobs:
                 -DPIKA_WITH_COMPILER_WARNINGS=ON \
                 -DPIKA_WITH_COMPILER_WARNINGS_AS_ERRORS=ON \
                 -DPIKA_WITH_SANITIZERS=On \
-                -DCMAKE_CXX_FLAGS="-fsanitize=thread -fno-omit-frame-pointer -Wno-error=ignored-optimization-argument" \
+                -DCMAKE_CXX_FLAGS="-fsanitize=thread -fno-omit-frame-pointer -Wno-error=ignored-optimization-argument -DBOOST_USE_UCONTEXT -DBOOST_USE_TSAN" \
                 -DPIKA_WITH_STACKOVERFLOW_DETECTION=Off \
                 -DPIKA_WITH_CHECK_MODULE_DEPENDENCIES=On
       - name: Build
