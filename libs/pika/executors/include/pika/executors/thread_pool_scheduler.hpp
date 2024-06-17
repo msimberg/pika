@@ -125,6 +125,7 @@ namespace pika::execution::experimental {
         void execute(F&& f, char const* fallback_annotation) const
         {
             pika::detail::thread_description desc(f, fallback_annotation);
+            // TODO: f passed to thread_init_data could be [&os]() { os.f(); }
             threads::detail::thread_init_data data(
                 threads::detail::make_thread_function_nullary(PIKA_FORWARD(F, f)), desc, priority_,
                 schedulehint_, stacksize_);
