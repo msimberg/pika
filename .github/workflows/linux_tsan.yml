@@ -79,7 +79,7 @@ jobs:
             # https://github.com/actions/runner-images/issues/9491
             sysctl --write vm.mmap_rnd_bits=28
 
-            export TSAN_OPTIONS=suppressions=$PWD/tools/tsan.supp
+            export TSAN_OPTIONS=suppressions=$PWD/tools/tsan.supp:halt_on_error=1:history_size=0:flush_memory_ms=1000:memory_limit_mb=512
             cd build
             ctest \
               --timeout 120 \
@@ -93,7 +93,7 @@ jobs:
             # See above.
             sysctl --write vm.mmap_rnd_bits=28
 
-            export TSAN_OPTIONS=suppressions=$PWD/tools/tsan.supp
+            export TSAN_OPTIONS=suppressions=$PWD/tools/tsan.supp:halt_on_error=1:history_size=0:flush_memory_ms=1000:memory_limit_mb=512
             cd build
             ctest \
               --timeout 120 \
