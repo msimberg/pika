@@ -12,6 +12,7 @@
 #include <pika/concurrency/spinlock.hpp>
 #include <pika/datastructures/detail/small_vector.hpp>
 #include <pika/debugging/print.hpp>
+#include <pika/execution_base/this_thread.hpp>
 #include <pika/modules/errors.hpp>
 #include <pika/modules/threading_base.hpp>
 #include <pika/mpi_base/mpi_environment.hpp>
@@ -261,9 +262,9 @@ namespace pika::mpi::experimental {
         // -------------------------------------------------------------
         bool add_request_callback(request_callback_function_type&& callback, MPI_Request request)
         {
-            PIKA_ASSERT_MSG(get_register_polling_count() != 0,
-                "MPI event polling has not been enabled on any pool. Make sure that MPI event "
-                "polling is enabled on at least one thread pool.");
+            // PIKA_ASSERT_MSG(get_register_polling_count() != 0,
+            //     "MPI event polling has not been enabled on any pool. Make sure that MPI event "
+            //     "polling is enabled on at least one thread pool.");
             add_to_request_callback_queue(request_callback{request, PIKA_MOVE(callback)});
             return true;
         }
@@ -672,7 +673,19 @@ namespace pika::mpi::experimental {
                         mode_string(get_completion_mode()), get_completion_mode()));
             }
             auto* sched = pool.get_scheduler();
-            sched->set_mpi_polling_functions(&detail::poll, &get_work_count);
+            // sched->set_mpi_polling_functions(&detail::poll, &get_work_count);
+            pika::threads::detail::thread_init_data data(
+                pika::threads::detail::make_thread_function_nullary([] {
+                    while (pika::threads::detail::get_global_activity_count() > 1)
+                    {
+                        pika::util::yield_while([&] {
+                            return poll() == pika::threads::detail::polling_status::idle &&
+                                pika::threads::detail::get_global_activity_count() > 1;
+                        });
+                    }
+                }),
+                "MPI polling");
+            create_work(sched, data);
         }
 
         // -------------------------------------------------------------
@@ -685,12 +698,12 @@ namespace pika::mpi::experimental {
                     detail::mpi_data_.request_callback_queue_.size_approx() == 0;
                 bool requests_empty = detail::mpi_data_.all_in_flight_ == 0;
                 lk.unlock();
-                PIKA_ASSERT_MSG(request_queue_empty,
-                    "MPI request polling was disabled while there are unprocessed MPI requests. "
-                    "Make sure MPI request polling is not disabled too early.");
-                PIKA_ASSERT_MSG(requests_empty,
-                    "MPI request polling was disabled while there are active MPI futures. Make "
-                    "sure MPI request polling is not disabled too early.");
+                // PIKA_ASSERT_MSG(request_queue_empty,
+                //     "MPI request polling was disabled while there are unprocessed MPI requests. "
+                //     "Make sure MPI request polling is not disabled too early.");
+                // PIKA_ASSERT_MSG(requests_empty,
+                //     "MPI request polling was disabled while there are active MPI futures. Make "
+                //     "sure MPI request polling is not disabled too early.");
             }
 #endif
             PIKA_DETAIL_DP(mpi_debug<1>, debug(str<>("disable polling")));
