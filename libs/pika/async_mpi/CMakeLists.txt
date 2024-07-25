@@ -68,3 +68,9 @@ pika_add_module(
     pika_config
   CMAKE_SUBDIRS examples tests
 )
+
+option(PIKA_WITH_MPI_GENERATE_SCRIPTS "Generate benchmarking scripts for mpi tests" OFF)
+mark_as_advanced(PIKA_WITH_MPI_GENERATE_SCRIPTS)
+if(PIKA_WITH_MPI_GENERATE_SCRIPTS)
+  add_subdirectory(scripts)
+endif()
