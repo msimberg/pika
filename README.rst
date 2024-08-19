@@ -65,3 +65,9 @@ To get started using pika see the `documentation <https://pikacpp.org>`_.
 .. |codacy_coverage| image:: https://app.codacy.com/project/badge/Coverage/e03f57f1c4cd40e7b514e552a723c125
      :target: https://app.codacy.com/gh/pika-org/pika
      :alt: Codacy coverage
+
+--------------
+modules branch
+--------------
+
+This branch attempts to add support for C++ 20 modules to pika. The branch is incomplete. Currently only some (pika) modules are compiled as C++ modules. See ()[libs/pika/CMakeLists.txt] for a list of enabled modules.
