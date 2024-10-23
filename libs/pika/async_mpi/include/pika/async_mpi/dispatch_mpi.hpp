@@ -228,27 +228,29 @@ namespace pika::mpi::experimental::detail {
 
 namespace pika::mpi::experimental {
     inline constexpr struct dispatch_mpi_t final
-      : pika::functional::detail::tag_fallback<dispatch_mpi_t>
     {
-    private:
-        template <typename Sender, typename F,
-            PIKA_CONCEPT_REQUIRES_(
-                pika::execution::experimental::is_sender_v<std::decay_t<Sender>>)>
-        friend constexpr PIKA_FORCEINLINE auto
-        tag_fallback_invoke(dispatch_mpi_t, Sender&& sender, F&& f)
+        template <typename Sender, typename F>
+        auto operator()(Sender&& sender, F&& f) const
         {
-            auto snd1 = detail::dispatch_mpi_sender<Sender, F>{
-                PIKA_FORWARD(Sender, sender), PIKA_FORWARD(F, f)};
-            return pika::execution::experimental::make_unique_any_sender(std::move(snd1));
+            if constexpr (requires {
+                              std::forward<Sender>(sender).dispatch_mpi(std::forward<F>(f));
+                          })
+            {
+                return std::forward<Sender>(sender).dispatch_mpi(std::forward<F>(f));
+            }
+            else
+            {
+                auto snd = detail::dispatch_mpi_sender<Sender, F>{
+                    PIKA_FORWARD(Sender, sender), PIKA_FORWARD(F, f)};
+                return pika::execution::experimental::make_unique_any_sender(std::move(snd));
+            }
         }
 
         template <typename F>
-        friend constexpr PIKA_FORCEINLINE auto tag_fallback_invoke(dispatch_mpi_t, F&& f)
+        PIKA_FORCEINLINE auto operator()(F&& f) const
         {
             return pika::execution::experimental::detail::partial_algorithm<dispatch_mpi_t, F>{
                 PIKA_FORWARD(F, f)};
         }
-
     } dispatch_mpi{};
-
 }    // namespace pika::mpi::experimental
