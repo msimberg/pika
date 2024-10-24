@@ -14,16 +14,17 @@
 
 #include <atomic>
 #include <cstdlib>
-#include <mpi.h>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include <mpi.h>
 
 namespace ex = pika::execution::experimental;
 namespace mpi = pika::mpi::experimental;
 namespace tt = pika::this_thread::experimental;
 
-#if defined(OPEN_MPI) && defined(PIKA_HAVE_SANITIZERS)
+#if defined(PIKA_HAVE_SANITIZERS) && defined(OPEN_MPI)
 # define OPENMPI_NO_SANITIZE PIKA_NO_SANITIZE_ADDRESS PIKA_NO_SANITIZE_THREAD
 #else
 # define OPENMPI_NO_SANITIZE
@@ -41,7 +42,7 @@ auto tag_invoke(mpi::transform_mpi_t, custom_type<T>& c)
 // -----------------------------------------------------------------
 // These tests are in a separate function so that we can annotate the whole thing with
 // disabled address sanitizer to work around (temporarily hide) unresolved stack corruption reports
-PIKA_NO_SANITIZE_ADDRESS void test_exception_handler_code(MPI_Comm comm, MPI_Datatype datatype)
+OPENMPI_NO_SANITIZE void test_exception_handler_code(MPI_Comm comm, MPI_Datatype datatype)
 {
     // Failure path
     {
@@ -132,7 +133,7 @@ PIKA_NO_SANITIZE_ADDRESS void test_exception_handler_code(MPI_Comm comm, MPI_Dat
 }
 
 // -----------------------------------------------------------------
-PIKA_NO_SANITIZE_ADDRESS void test_exception_no_handler(MPI_Comm comm)
+OPENMPI_NO_SANITIZE void test_exception_no_handler(MPI_Comm comm)
 {
     // Use the default error handler MPI_ERRORS_ARE_FATAL
     mpi::enable_polling enable_polling_no_errhandler;
