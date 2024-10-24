@@ -484,7 +484,7 @@ namespace PIKA_DETAIL_NS_DEBUG {
         }
 
         template <typename T, typename V>
-        constexpr void set(T&, V const&)
+        static constexpr void set(T&, V const&)
         {
         }
 
@@ -496,7 +496,7 @@ namespace PIKA_DETAIL_NS_DEBUG {
         }
 
         template <typename Expr>
-        constexpr bool eval(Expr const&)
+        constexpr bool eval(Expr const&) const
         {
             return true;
         }
@@ -586,7 +586,7 @@ namespace PIKA_DETAIL_NS_DEBUG {
         }
 
         template <typename T, typename V>
-        void set(T& var, V const& val)
+        static void set(T& var, V const& val)
         {
             var = val;
         }
@@ -598,7 +598,7 @@ namespace PIKA_DETAIL_NS_DEBUG {
         }
 
         template <typename Expr>
-        auto eval(Expr const& e)
+        auto eval(Expr const& e) const
         {
             return e();
         }
