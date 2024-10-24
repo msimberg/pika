@@ -24,7 +24,7 @@ namespace mpi = pika::mpi::experimental;
 namespace tt = pika::this_thread::experimental;
 
 #if defined(OPEN_MPI) && defined(PIKA_HAVE_SANITIZERS)
-# define OPENMPI_NO_SANITIZE PIKA_NO_SANITIZE_ADDRESS
+# define OPENMPI_NO_SANITIZE PIKA_NO_SANITIZE_ADDRESS PIKA_NO_SANITIZE_THREAD
 #else
 # define OPENMPI_NO_SANITIZE
 #endif

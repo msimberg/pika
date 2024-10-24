@@ -172,6 +172,9 @@
 #   endif
 #   if __has_feature(thread_sanitizer)
 #    define PIKA_HAVE_THREAD_SANITIZER
+#    if defined(PIKA_GCC_VERSION) || defined(PIKA_CLANG_VERSION)
+#     define PIKA_NO_SANITIZE_THREAD __attribute__((no_sanitize("thread")))
+#    endif
 #   endif
 #  elif defined(__SANITIZE_ADDRESS__)    // MSVC defines this
 #   define PIKA_HAVE_ADDRESS_SANITIZER
