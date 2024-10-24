@@ -258,7 +258,7 @@ OPENMPI_NO_SANITIZE int pika_main()
 }
 
 //----------------------------------------------------------------------------
-int main(int argc, char* argv[])
+OPENMPI_NO_SANITIZE int main(int argc, char* argv[])
 {
     // -----------------
     // Init MPI
