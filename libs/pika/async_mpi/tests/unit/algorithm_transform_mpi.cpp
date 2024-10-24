@@ -23,6 +23,12 @@ namespace ex = pika::execution::experimental;
 namespace mpi = pika::mpi::experimental;
 namespace tt = pika::this_thread::experimental;
 
+#if defined(OPEN_MPI) && defined(PIKA_HAVE_SANITIZERS)
+# define OPENMPI_NO_SANITIZE PIKA_NO_SANITIZE_ADDRESS
+#else
+# define OPENMPI_NO_SANITIZE
+#endif
+
 // -----------------------------------------------------------------
 // This overload is only used to check dispatching. It is not a useful implementation.
 template <typename T>
@@ -149,7 +155,7 @@ PIKA_NO_SANITIZE_ADDRESS void test_exception_no_handler(MPI_Comm comm)
 }
 
 // -----------------------------------------------------------------
-int pika_main()
+OPENMPI_NO_SANITIZE int pika_main()
 {
     int size, rank;
     MPI_Comm comm = MPI_COMM_WORLD;
@@ -162,7 +168,6 @@ int pika_main()
 
     {
         {
-            // Use the custom error handler which throws exceptions on mpi errors
             mpi::enable_polling enable_polling(mpi::exception_mode::install_handler);
             // Success path
             {
@@ -234,11 +239,16 @@ int pika_main()
                 PIKA_TEST_EQ(data, 42);
             }
 
+#if defined(OPEN_MPI)
+            // mpich does not support throwing exceptions from error handlers
+            // (lock issues, see https://github.com/pmodels/mpich/issues/7187 )
             test_exception_handler_code(comm, datatype);
 
         }    // let the user polling go out of scope
-
         test_exception_no_handler(comm);
+#else
+        }
+#endif
     }
 
     test_adl_isolation(mpi::transform_mpi(my_namespace::my_sender{}, [](MPI_Request*) {}));
@@ -250,8 +260,11 @@ int pika_main()
 //----------------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
-    int provided{};
-    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+    // -----------------
+    // Init MPI
+    int provided, preferred = MPI_THREAD_MULTIPLE;
+    MPI_Init_thread(&argc, &argv, preferred, &provided);
+    PIKA_TEST_EQ(provided, preferred);
 
     // Start runtime and collect runtime exit status
     auto result = pika::init(pika_main, argc, argv);
