@@ -142,19 +142,15 @@ namespace pika::let_value_detail {
                 successor_operation_state_types<std::tuple, pika::detail::variant>,
                 pika::detail::monostate>
                 successor_op_state;
+            PIKA_NO_UNIQUE_ADDRESS std::decay_t<Receiver> receiver;
+            PIKA_NO_UNIQUE_ADDRESS std::decay_t<F> f;
 
             struct let_value_predecessor_receiver
             {
-                PIKA_NO_UNIQUE_ADDRESS std::decay_t<Receiver> receiver;
-                PIKA_NO_UNIQUE_ADDRESS std::decay_t<F> f;
                 operation_state& op_state;
 
-                template <typename Receiver_, typename F_>
-                let_value_predecessor_receiver(
-                    Receiver_&& receiver, F_&& f, operation_state& op_state)
-                  : receiver(PIKA_FORWARD(Receiver_, receiver))
-                  , f(PIKA_FORWARD(F_, f))
-                  , op_state(op_state)
+                let_value_predecessor_receiver(operation_state& op_state)
+                  : op_state(op_state)
                 {
                 }
 
@@ -163,13 +159,13 @@ namespace pika::let_value_detail {
                     let_value_predecessor_receiver&& r, Error&& error) noexcept
                 {
                     pika::execution::experimental::set_error(
-                        PIKA_MOVE(r.receiver), PIKA_FORWARD(Error, error));
+                        PIKA_MOVE(r.op_state.receiver), PIKA_FORWARD(Error, error));
                 }
 
                 friend void tag_invoke(pika::execution::experimental::set_stopped_t,
                     let_value_predecessor_receiver&& r) noexcept
                 {
-                    pika::execution::experimental::set_stopped(PIKA_MOVE(r.receiver));
+                    pika::execution::experimental::set_stopped(PIKA_MOVE(r.op_state.receiver));
                 };
 
                 struct start_visitor
@@ -249,13 +245,13 @@ namespace pika::let_value_detail {
                             r.op_state.predecessor_ts
                                 .template emplace<std::tuple<std::decay_t<Ts>...>>(
                                     PIKA_FORWARD(Ts, ts)...);
-                            pika::detail::visit(
-                                set_value_visitor{PIKA_MOVE(r.receiver), PIKA_MOVE(f), r.op_state},
+                            pika::detail::visit(set_value_visitor{PIKA_MOVE(r.op_state.receiver),
+                                                    PIKA_MOVE(f), r.op_state.op_state},
                                 r.op_state.predecessor_ts);
                         },
                         [&](std::exception_ptr ep) {
                             pika::execution::experimental::set_error(
-                                PIKA_MOVE(r.receiver), PIKA_MOVE(ep));
+                                PIKA_MOVE(r.op_state.receiver), PIKA_MOVE(ep));
                         });
                 }
             };
@@ -264,8 +260,9 @@ namespace pika::let_value_detail {
             operation_state(PredecessorSender_&& predecessor_sender, Receiver_&& receiver, F_&& f)
               : predecessor_op_state{pika::execution::experimental::connect(
                     PIKA_FORWARD(PredecessorSender_, predecessor_sender),
-                    let_value_predecessor_receiver(
-                        PIKA_FORWARD(Receiver_, receiver), PIKA_FORWARD(F_, f), *this))}
+                    let_value_predecessor_receiver(*this))}
+              , receiver(PIKA_FORWARD(Receiver_, receiver))
+              , f(PIKA_FORWARD(F_, f))
             {
             }
 
