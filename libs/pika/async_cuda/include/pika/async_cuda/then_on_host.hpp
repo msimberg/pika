@@ -71,9 +71,9 @@ namespace pika::cuda::experimental {
             }
 
             template <typename... Ts>
-            friend void tag_invoke(pika::execution::experimental::set_value_t,
-                then_on_host_receiver_type&& r, Ts&&... ts) noexcept
+            void set_value(Ts&&... ts) && noexcept
             {
+                auto r = PIKA_MOVE(*this);
                 pika::detail::try_catch_exception_ptr(
                     [&]() {
                         if constexpr (std::is_void_v<std::invoke_result_t<F, Ts...>>)

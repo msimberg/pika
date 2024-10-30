@@ -119,9 +119,9 @@ namespace pika {
             };
 
             template <typename... Ts>
-            friend void tag_invoke(pika::execution::experimental::set_value_t,
-                require_started_receiver_type r, Ts&&... ts) noexcept
+            void set_value(Ts&&... ts) && noexcept
             {
+                auto r = PIKA_MOVE(*this);
                 PIKA_ASSERT(r.op_state != nullptr);
                 pika::execution::experimental::set_value(
                     PIKA_MOVE(r.op_state->receiver), PIKA_FORWARD(Ts, ts)...);
@@ -379,13 +379,11 @@ namespace pika {
                 }
 
                 s.connected = true;
-                return
-                {
-                    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+                return {// NOLINTNEXTLINE(bugprone-unchecked-optional-access)
                     *std::exchange(s.sender, std::nullopt), PIKA_FORWARD(Receiver, receiver)
 #if defined(PIKA_DETAIL_HAVE_REQUIRE_STARTED_MODE)
                                                                 ,
-                        s.mode
+                    s.mode
 #endif
                 };
             }
@@ -409,12 +407,10 @@ namespace pika {
                 }
 
                 s.connected = true;
-                return
-                {
-                    *s.sender, PIKA_FORWARD(Receiver, receiver)
+                return {*s.sender, PIKA_FORWARD(Receiver, receiver)
 #if defined(PIKA_DETAIL_HAVE_REQUIRE_STARTED_MODE)
-                                   ,
-                        s.mode
+                                       ,
+                    s.mode
 #endif
                 };
             }

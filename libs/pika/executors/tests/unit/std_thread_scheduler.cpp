@@ -24,7 +24,7 @@ struct custom_type_non_default_constructible_non_copyable
     int x;
     custom_type_non_default_constructible_non_copyable() = delete;
     explicit custom_type_non_default_constructible_non_copyable(int x)
-      : x(x){};
+      : x(x) {};
     custom_type_non_default_constructible_non_copyable(
         custom_type_non_default_constructible_non_copyable&&) = default;
     custom_type_non_default_constructible_non_copyable& operator=(
@@ -68,7 +68,7 @@ struct check_context_receiver
     }
 
     template <typename... Ts>
-    friend void tag_invoke(ex::set_value_t, check_context_receiver&& r, Ts&&...) noexcept
+    void set_value(Ts&&...) && noexcept
     {
         PIKA_TEST_NEQ(r.parent_id, std::this_thread::get_id());
         PIKA_TEST_NEQ(std::thread::id(), std::this_thread::get_id());
@@ -226,8 +226,9 @@ struct callback_receiver
     friend void tag_invoke(ex::set_stopped_t, callback_receiver&&) noexcept { PIKA_TEST(false); }
 
     template <typename... Ts>
-    friend void tag_invoke(ex::set_value_t, callback_receiver&& r, Ts&&...) noexcept
+    void set_value(Ts&&...) && noexcept
     {
+        auto r = PIKA_MOVE(*this);
         r.f();
         std::lock_guard l{r.mtx};
         r.executed = true;

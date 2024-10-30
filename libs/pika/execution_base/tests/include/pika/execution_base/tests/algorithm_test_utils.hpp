@@ -151,10 +151,10 @@ struct callback_receiver
     };
 
     template <typename... Ts>
-    friend auto tag_invoke(
-        pika::execution::experimental::set_value_t, callback_receiver&& r, Ts&&... ts) noexcept
+    auto set_value(Ts&&... ts) && noexcept
         -> decltype(PIKA_INVOKE(std::declval<std::decay_t<F>>(), std::forward<Ts>(ts)...), void())
     {
+        auto r = PIKA_MOVE(*this);
         PIKA_INVOKE(r.f, std::forward<Ts>(ts)...);
         r.set_value_called = true;
     }
@@ -190,9 +190,9 @@ struct error_callback_receiver
     };
 
     template <typename... Ts>
-    friend void tag_invoke(
-        pika::execution::experimental::set_value_t, error_callback_receiver&& r, Ts&&...) noexcept
+    void set_value(Ts&&...) && noexcept
     {
+        auto r = PIKA_MOVE(*this);
         PIKA_TEST(r.expect_set_value);
     }
 
@@ -412,7 +412,7 @@ struct custom_type_non_default_constructible
     int x;
     custom_type_non_default_constructible() = delete;
     explicit custom_type_non_default_constructible(int x)
-      : x(x){};
+      : x(x) {};
     custom_type_non_default_constructible(custom_type_non_default_constructible&&) = default;
     custom_type_non_default_constructible& operator=(
         custom_type_non_default_constructible&&) = default;
@@ -426,7 +426,7 @@ struct custom_type_non_default_constructible_non_copyable
     int x;
     custom_type_non_default_constructible_non_copyable() = delete;
     explicit custom_type_non_default_constructible_non_copyable(int x)
-      : x(x){};
+      : x(x) {};
     custom_type_non_default_constructible_non_copyable(
         custom_type_non_default_constructible_non_copyable&&) = default;
     custom_type_non_default_constructible_non_copyable& operator=(
