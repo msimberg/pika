@@ -70,7 +70,10 @@ namespace pika::start_detached_detail {
             void set_value(Ts&&...) && noexcept
             {
                 auto r = std::move(*this);
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                PIKA_LOG(warn, "start_detached releasing operation state");
                 r.op_state.release();
+                PIKA_LOG(warn, "start_detached released operation state");
             }
         };
 

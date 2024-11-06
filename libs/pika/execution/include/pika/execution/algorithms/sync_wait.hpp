@@ -135,7 +135,12 @@ namespace pika::sync_wait_detail {
             pika::binary_semaphore<> sem{0};
             pika::detail::variant<pika::detail::monostate, error_type, value_type> value;
 
-            void wait() { sem.acquire(); }
+            void wait()
+            {
+                PIKA_LOG(warn, "sync_wait acquiring semaphore")
+                sem.acquire();
+                PIKA_LOG(warn, "sync_wait acquired semaphore")
+            }
 
             auto get_value()
             {
@@ -158,7 +163,11 @@ namespace pika::sync_wait_detail {
 
         shared_state& state;
 
-        void signal_set_called() noexcept { state.sem.release(); }
+        void signal_set_called() noexcept
+        {
+            PIKA_LOG(warn, "sync_wait signaling semaphore")
+            state.sem.release();
+        }
 
         template <typename Error>
         friend void tag_invoke(pika::execution::experimental::set_error_t,

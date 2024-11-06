@@ -15,6 +15,10 @@
 #include <pika/execution_base/sender.hpp>
 #include <pika/execution_base/this_thread.hpp>
 #include <pika/functional/unique_function.hpp>
+#include <pika/logging.hpp>
+
+#include <chrono>
+#include <thread>
 
 #include <atomic>
 #include <exception>
@@ -56,6 +60,7 @@ namespace pika::execution::experimental {
 
             ~async_rw_mutex_shared_state()
             {
+                PIKA_LOG(warn, "async_rw_mutex shared state releasing {}", fmt::ptr(this));
                 // If there is no next state the continuations must be empty.
                 PIKA_ASSERT(next_state || continuations.empty());
 
@@ -72,8 +77,31 @@ namespace pika::execution::experimental {
                     // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
                     next_state->set_value(std::move(*value));
 
-                    for (auto& continuation : continuations) { continuation(next_state); }
+                    PIKA_LOG(warn, "async_rw_mutex shared state releasing, running continuations");
+                    for (auto& continuation : continuations)
+                    {
+                        PIKA_LOG(warn, "async_rw_mutex shared state running continuation on {}",
+                            fmt::ptr(this));
+                        continuation(next_state);
+                        PIKA_LOG(warn, "async_rw_mutex shared state ran continuation on {}",
+                            fmt::ptr(this));
+                    }
+                    // for (std::size_t i = 0; i + 1 < continuations.size(); ++i)
+                    // {
+                    //     PIKA_LOG(warn, "async_rw_mutex shared state running continuation on {}",
+                    //         fmt::ptr(this));
+                    //     continuations[i](next_state);
+                    //     PIKA_LOG(warn, "async_rw_mutex shared state ran continuation on {}",
+                    //         fmt::ptr(this));
+                    // }
+
+                    // if (!continuations.empty())
+                    // {
+                    //     continuations[continuations.size() - 1](std::move(next_state));
+                    // }
                 }
+                std::this_thread::sleep_for(std::chrono::nanoseconds(10000));
+                PIKA_LOG(warn, "async_rw_mutex shared state released {}", fmt::ptr(this));
             }
 
             template <typename U>
@@ -464,6 +492,7 @@ namespace pika::execution::experimental {
                         "already started?");
 
                     auto continuation = [&os](shared_state_ptr_type state) mutable {
+                        PIKA_LOG(warn, "async_rw_mutex continuation");
                         try
                         {
                             pika::execution::experimental::set_value(
@@ -474,6 +503,7 @@ namespace pika::execution::experimental {
                             pika::execution::experimental::set_error(
                                 std::move(os.r), std::current_exception());
                         }
+                        PIKA_LOG(warn, "async_rw_mutex continuation exiting");
                     };
 
                     if (auto p = os.prev_state.lock())
@@ -672,6 +702,7 @@ namespace pika::execution::experimental {
                         "already started?");
 
                     auto continuation = [&os](shared_state_ptr_type state) mutable {
+                        PIKA_LOG(warn, "async_rw_mutex continuation");
                         try
                         {
                             pika::execution::experimental::set_value(
@@ -682,6 +713,7 @@ namespace pika::execution::experimental {
                             pika::execution::experimental::set_error(
                                 std::move(os.r), std::current_exception());
                         }
+                        PIKA_LOG(warn, "async_rw_mutex continuation exit");
                     };
 
                     if (auto p = os.prev_state.lock())
@@ -689,8 +721,15 @@ namespace pika::execution::experimental {
                         // If the previous state is set and it's still alive,
                         // add a continuation to be triggered when the previous
                         // state is released.
+                        PIKA_LOG(warn, "async_rw_mutex adding continuation");
+                        PIKA_LOG(warn, "async_rw_mutex adding continuation, prev_state.count() {}",
+                            p.use_count());
+                        PIKA_LOG(warn, "async_rw_mutex adding continuation, state.count() {}",
+                            os.state.use_count());
                         p->add_continuation(std::move(continuation));
+                        PIKA_LOG(warn, "resetting os.state {}", fmt::ptr(os.state.get()));
                         os.state.reset();
+                        PIKA_LOG(warn, "resetting os.prev_state {}", fmt::ptr(p.get()));
                         os.prev_state.reset();
                     }
                     else
@@ -698,6 +737,7 @@ namespace pika::execution::experimental {
                         // There is no previous state on the first access or the
                         // previous state has already been released. We can run
                         // the continuation immediately.
+                        PIKA_LOG(warn, "async_rw_mutex running continuation inline");
                         continuation(std::move(os.state));
                     }
                 }
