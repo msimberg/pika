@@ -19,6 +19,18 @@
 #include <utility>
 
 namespace pika::threads::coroutines::detail {
+    struct [[nodiscard]] require_no_yield
+    {
+        PIKA_EXPORT require_no_yield() noexcept;
+        require_no_yield(require_no_yield&&) = delete;
+        require_no_yield& operator=(require_no_yield&&) = delete;
+        require_no_yield(require_no_yield const&) = delete;
+        require_no_yield& operator=(require_no_yield const&) = delete;
+        PIKA_EXPORT ~require_no_yield() noexcept;
+        bool old;
+    };
+
+    PIKA_EXPORT void check_yield() noexcept;
 
     class coroutine_stackful_self : public coroutine_self
     {
@@ -32,6 +44,8 @@ namespace pika::threads::coroutines::detail {
         arg_type yield_impl(result_type arg) override
         {
             PIKA_ASSERT(pimpl_);
+
+            check_yield();
 
             this->pimpl_->bind_result(arg);
 
