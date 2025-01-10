@@ -41,7 +41,7 @@ namespace pika::threads::coroutines::detail {
             PIKA_LOG(err,
                 "trying to yield a pika thread when it has been "
                 "disallowed, terminating");
-            std::terminate();
+            std::exit(SIGQUIT);
         }
     }
 
