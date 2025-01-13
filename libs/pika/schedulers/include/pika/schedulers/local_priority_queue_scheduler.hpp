@@ -519,19 +519,19 @@ namespace pika::threads::detail {
                 this_high_priority_queue->increment_num_pending_misses();
             }
 
-            {
-                bool result = this_queue->get_next_thread(thrd);
+            // {
+            //     bool result = this_queue->get_next_thread(thrd);
 
-                this_queue->increment_num_pending_accesses();
-                if (result) return true;
-                this_queue->increment_num_pending_misses();
+            //     this_queue->increment_num_pending_accesses();
+            //     if (result) return true;
+            //     this_queue->increment_num_pending_misses();
 
-                bool have_staged =
-                    this_queue->get_staged_queue_length(std::memory_order_relaxed) != 0;
+            //     bool have_staged =
+            //         this_queue->get_staged_queue_length(std::memory_order_relaxed) != 0;
 
-                // Give up, we should have work to convert.
-                if (have_staged) { return false; }
-            }
+            //     // Give up, we should have work to convert.
+            //     if (have_staged) { return false; }
+            // }
 
             if (!running) { return false; }
 

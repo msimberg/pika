@@ -163,12 +163,12 @@ namespace pika::execution::experimental {
             bool add_op_state(async_rw_mutex_operation_state_base* op_state) noexcept
             {
                 op_state->next = static_cast<async_rw_mutex_operation_state_base*>(
-                    op_state_head.load(std::memory_order_relaxed));
+                    op_state_head.load()); // std::memory_order_relaxed));
                 do {
                     if (op_state->next == static_cast<void*>(this)) { return false; }
                 } while (!op_state_head.compare_exchange_weak(op_state->next,
-                    static_cast<void*>(op_state), std::memory_order_release,
-                    std::memory_order_relaxed));
+                    static_cast<void*>(op_state))); //, std::memory_order_release,
+                    // std::memory_order_relaxed));
 
                 return true;
             }
@@ -182,10 +182,12 @@ namespace pika::execution::experimental {
 
             void done(shared_state_ptr_type p) noexcept
             {
+                p.reset();
+
                 // `this` is not an async_rw_mutex_operation_state_base*, but is a known value to
                 // signal that the queue has been processed
                 auto* current = static_cast<async_rw_mutex_operation_state_base*>(
-                    op_state_head.exchange(static_cast<void*>(this), std::memory_order_acquire));
+                    op_state_head.exchange(static_cast<void*>(this)));//, std::memory_order_acquire));
 
                 // We have now successfully acquired the head of the queue, and signaled to other
                 // threads that they can't add any more items to the queue. We can now process the
@@ -193,7 +195,13 @@ namespace pika::execution::experimental {
                 //
                 // We are also not accessing this shared state directly anymore, so we can
                 // reset p early.
-                p.reset();
+                //
+		// TODO: This may be very late. After the above exchange has
+		// been done, the continuation on this shared state can run
+		// inline in some other thread, but the continuation released
+		// by this shared state would be released only after this
+		// reset...
+                // p.reset();
 
                 // Because of the way operation states are linked together, they will be accessed in
                 // LIFO order (op_state_head points to the last operation state to be added, or
