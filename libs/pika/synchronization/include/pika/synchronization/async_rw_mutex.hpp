@@ -342,6 +342,79 @@ namespace pika::execution::experimental {
                 }
             }
         };
+
+        template <typename ReadWriteT, typename ReadT, async_rw_mutex_access_type AccessType>
+        struct async_rw_mutex_sender : private detail::async_rw_mutex_copyability<AccessType>
+        {
+            PIKA_STDEXEC_SENDER_CONCEPT
+
+            using shared_state_type = detail::async_rw_mutex_shared_state<ReadWriteT>;
+            using shared_state_ptr_type = std::shared_ptr<shared_state_type>;
+
+            shared_state_ptr_type state;
+
+            using access_type = async_rw_mutex_access_wrapper<ReadWriteT, ReadT, AccessType>;
+            template <template <typename...> class Tuple, template <typename...> class Variant>
+            using value_types = Variant<Tuple<access_type>>;
+
+            template <template <typename...> class Variant>
+            using error_types = Variant<std::exception_ptr>;
+
+            static constexpr bool sends_done = false;
+
+            using completion_signatures = pika::execution::experimental::completion_signatures<
+                pika::execution::experimental::set_value_t(access_type),
+                pika::execution::experimental::set_error_t(std::exception_ptr)>;
+
+            template <typename Receiver>
+            using operation_state_type =
+                detail::async_rw_mutex_operation_state<ReadWriteT, ReadT, AccessType, Receiver>;
+
+            explicit async_rw_mutex_sender(shared_state_ptr_type state) noexcept
+              : state(std::move(state))
+            {
+            }
+
+            async_rw_mutex_sender(async_rw_mutex_sender&&) noexcept = default;
+            async_rw_mutex_sender& operator=(async_rw_mutex_sender&&) noexcept = default;
+            async_rw_mutex_sender(async_rw_mutex_sender const&) noexcept = default;
+            async_rw_mutex_sender& operator=(async_rw_mutex_sender const&) noexcept = default;
+
+            ~async_rw_mutex_sender() noexcept
+            {
+                if (state)
+                {
+                    PIKA_LOG(err,
+                        "async_rw_mutex sender was destroyed without the shared state being "
+                        "released, was the sender never connected?");
+                    std::terminate();
+                }
+            }
+
+            template <typename Receiver>
+            friend operation_state_type<Receiver> tag_invoke(
+                pika::execution::experimental::connect_t, async_rw_mutex_sender&& s, Receiver&& r)
+            {
+                return operation_state_type<Receiver>{
+                    std::forward<Receiver>(r), std::move(s.state)};
+            }
+
+            template <typename Receiver>
+            friend auto tag_invoke(pika::execution::experimental::connect_t,
+                async_rw_mutex_sender const& s, Receiver&& r)
+            {
+                if constexpr (AccessType == async_rw_mutex_access_type::readwrite)
+                {
+                    static_assert(sizeof(Receiver) == 0,
+                        "Are you missing a std::move? The async_rw_mutex sender in read-write mode "
+                        "is not copyable and thus not l-value connectable. Make sure you are "
+                        "passing a non-const r-value reference of the sender or accessing the "
+                        "sender in the correct mode.");
+                }
+
+                return operation_state_type<Receiver>{std::forward<Receiver>(r), s.state};
+            }
+        };
     }    // namespace detail
 
     /// \brief A wrapper for values sent by senders from \ref async_rw_mutex with read-only access.
@@ -502,7 +575,7 @@ namespace pika::execution::experimental {
     {
     private:
         template <async_rw_mutex_access_type AccessType>
-        struct sender;
+        using sender_type = detail::async_rw_mutex_sender<void, void, AccessType>;
 
         using shared_state_type = detail::async_rw_mutex_shared_state<void>;
         using shared_state_weak_ptr_type = std::weak_ptr<shared_state_type>;
@@ -522,8 +595,8 @@ namespace pika::execution::experimental {
         using readwrite_access_type = async_rw_mutex_access_wrapper<readwrite_type, read_type,
             async_rw_mutex_access_type::readwrite>;
 
-        using read_sender_type = sender<async_rw_mutex_access_type::read>;
-        using readwrite_sender_type = sender<async_rw_mutex_access_type::readwrite>;
+        using read_sender_type = sender_type<async_rw_mutex_access_type::read>;
+        using readwrite_sender_type = sender_type<async_rw_mutex_access_type::readwrite>;
 
         using allocator_type = Allocator;
 
@@ -571,77 +644,6 @@ namespace pika::execution::experimental {
         }
 
     private:
-        template <async_rw_mutex_access_type AccessType>
-        struct sender : private detail::async_rw_mutex_copyability<AccessType>
-        {
-            PIKA_STDEXEC_SENDER_CONCEPT
-
-            shared_state_ptr_type state;
-
-            using access_type =
-                async_rw_mutex_access_wrapper<readwrite_type, read_type, AccessType>;
-            template <template <typename...> class Tuple, template <typename...> class Variant>
-            using value_types = Variant<Tuple<access_type>>;
-
-            template <template <typename...> class Variant>
-            using error_types = Variant<std::exception_ptr>;
-
-            static constexpr bool sends_done = false;
-
-            using completion_signatures = pika::execution::experimental::completion_signatures<
-                pika::execution::experimental::set_value_t(access_type),
-                pika::execution::experimental::set_error_t(std::exception_ptr)>;
-
-            template <typename Receiver>
-            using operation_state_type = detail::async_rw_mutex_operation_state<readwrite_type,
-                read_type, AccessType, Receiver>;
-
-            explicit sender(shared_state_ptr_type state) noexcept
-              : state(std::move(state))
-            {
-            }
-
-            sender(sender&&) noexcept = default;
-            sender& operator=(sender&&) noexcept = default;
-            sender(sender const&) noexcept = default;
-            sender& operator=(sender const&) noexcept = default;
-
-            ~sender() noexcept
-            {
-                if (state)
-                {
-                    PIKA_LOG(err,
-                        "async_rw_mutex sender was destroyed without the shared state being "
-                        "released, was the sender never connected?");
-                    std::terminate();
-                }
-            }
-
-            template <typename Receiver>
-            friend operation_state_type<Receiver>
-            tag_invoke(pika::execution::experimental::connect_t, sender&& s, Receiver&& r)
-            {
-                return operation_state_type<Receiver>{
-                    std::forward<Receiver>(r), std::move(s.state)};
-            }
-
-            template <typename Receiver>
-            friend operation_state_type<Receiver>
-            tag_invoke(pika::execution::experimental::connect_t, sender const& s, Receiver&& r)
-            {
-                if constexpr (AccessType == async_rw_mutex_access_type::readwrite)
-                {
-                    static_assert(sizeof(Receiver) == 0,
-                        "Are you missing a std::move? The async_rw_mutex sender in read-write mode "
-                        "is not copyable and thus not l-value connectable. Make sure you are "
-                        "passing a non-const r-value reference of the sender or accessing the "
-                        "sender in the correct mode.");
-                }
-
-                return operation_state_type<Receiver>{std::forward<Receiver>(r), s.state};
-            }
-        };
-
         PIKA_NO_UNIQUE_ADDRESS allocator_type alloc;
 
         async_rw_mutex_access_type prev_access = async_rw_mutex_access_type::readwrite;
@@ -661,7 +663,8 @@ namespace pika::execution::experimental {
             "non-void)");
 
         template <async_rw_mutex_access_type AccessType>
-        struct sender;
+        using sender_type = detail::async_rw_mutex_sender<std::decay_t<ReadWriteT>,
+            std::decay_t<ReadT> const, AccessType>;
 
     public:
         /// \brief The type of read-only types accessed through the mutex.
@@ -679,10 +682,10 @@ namespace pika::execution::experimental {
             async_rw_mutex_access_type::readwrite>;
 
         /// \brief The type of read-only-access senders.
-        using read_sender_type = sender<async_rw_mutex_access_type::read>;
+        using read_sender_type = sender_type<async_rw_mutex_access_type::read>;
 
         /// \brief The type of read-write-access senders.
-        using readwrite_sender_type = sender<async_rw_mutex_access_type::readwrite>;
+        using readwrite_sender_type = sender_type<async_rw_mutex_access_type::readwrite>;
 
         using allocator_type = Allocator;
 
@@ -753,77 +756,6 @@ namespace pika::execution::experimental {
         using shared_state_ptr_type = std::shared_ptr<shared_state_type>;
 
     private:
-        template <async_rw_mutex_access_type AccessType>
-        struct sender : private detail::async_rw_mutex_copyability<AccessType>
-        {
-            PIKA_STDEXEC_SENDER_CONCEPT
-
-            shared_state_ptr_type state;
-
-            using access_type =
-                async_rw_mutex_access_wrapper<readwrite_type, read_type, AccessType>;
-            template <template <typename...> class Tuple, template <typename...> class Variant>
-            using value_types = Variant<Tuple<access_type>>;
-
-            template <template <typename...> class Variant>
-            using error_types = Variant<std::exception_ptr>;
-
-            static constexpr bool sends_done = false;
-
-            using completion_signatures = pika::execution::experimental::completion_signatures<
-                pika::execution::experimental::set_value_t(access_type),
-                pika::execution::experimental::set_error_t(std::exception_ptr)>;
-
-            template <typename Receiver>
-            using operation_state_type = detail::async_rw_mutex_operation_state<readwrite_type,
-                read_type, AccessType, Receiver>;
-
-            explicit sender(shared_state_ptr_type state) noexcept
-              : state(std::move(state))
-            {
-            }
-
-            sender(sender&&) noexcept = default;
-            sender& operator=(sender&&) noexcept = default;
-            sender(sender const&) noexcept = default;
-            sender& operator=(sender const&) noexcept = default;
-
-            ~sender() noexcept
-            {
-                if (state)
-                {
-                    PIKA_LOG(err,
-                        "async_rw_mutex sender was destroyed without the shared state being "
-                        "released, was the sender never connected?");
-                    std::terminate();
-                }
-            }
-
-            template <typename Receiver>
-            friend operation_state_type<Receiver>
-            tag_invoke(pika::execution::experimental::connect_t, sender&& s, Receiver&& r)
-            {
-                return operation_state_type<Receiver>{
-                    std::forward<Receiver>(r), std::move(s.state)};
-            }
-
-            template <typename Receiver>
-            friend auto
-            tag_invoke(pika::execution::experimental::connect_t, sender const& s, Receiver&& r)
-            {
-                if constexpr (AccessType == async_rw_mutex_access_type::readwrite)
-                {
-                    static_assert(sizeof(Receiver) == 0,
-                        "Are you missing a std::move? The async_rw_mutex sender in read-write mode "
-                        "is not copyable and thus not l-value connectable. Make sure you are "
-                        "passing a non-const r-value reference of the sender or accessing the "
-                        "sender in the correct mode.");
-                }
-
-                return operation_state_type<Receiver>{std::forward<Receiver>(r), s.state};
-            }
-        };
-
         value_ptr_type value;
         PIKA_NO_UNIQUE_ADDRESS allocator_type alloc;
 
