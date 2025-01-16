@@ -128,361 +128,364 @@ namespace pika::execution::experimental {
     /// When the access type is \ref async_rw_mutex_access_type::read the wrapper is copyable.
     template <typename ReadWriteT, typename ReadT, async_rw_mutex_access_type AccessType>
     class async_rw_mutex_access_wrapper;
+}    // namespace pika::execution::experimental
 
-    namespace detail {
-        // Helper base class to control whether a type is copyable or not. Useful to make sure e.g.
-        // read-write classes are move-only and read-only classes are copyable.
-        template <async_rw_mutex_access_type AccessType>
-        struct async_rw_mutex_copyability;
+namespace pika::async_rw_mutex_detail {
+    // Helper base class to control whether a type is copyable or not. Useful to make sure e.g.
+    // read-write classes are move-only and read-only classes are copyable.
+    template <pika::execution::experimental::async_rw_mutex_access_type AccessType>
+    struct copyability;
 
-        template <>
-        struct async_rw_mutex_copyability<async_rw_mutex_access_type::read>
+    template <>
+    struct copyability<pika::execution::experimental::async_rw_mutex_access_type::read>
+    {
+        copyability() noexcept = default;
+        copyability(copyability&&) noexcept = default;
+        copyability& operator=(copyability&&) noexcept = default;
+        copyability(copyability const&) noexcept = default;
+        copyability& operator=(copyability const&) noexcept = default;
+    };
+
+    template <>
+    struct copyability<pika::execution::experimental::async_rw_mutex_access_type::readwrite>
+    {
+        copyability() noexcept = default;
+        copyability(copyability&&) noexcept = default;
+        copyability& operator=(copyability&&) noexcept = default;
+        copyability(copyability const&) = delete;
+        copyability& operator=(copyability const&) = delete;
+    };
+
+    struct operation_state_base
+    {
+        // This is most of the time an operation_state_base*, but can also contain the special value
+        // of the address of the shared state, hence this is a void*.
+        void* next{nullptr};
+        virtual void continuation() noexcept = 0;
+    };
+
+    struct shared_state_base
+    {
+        using shared_state_ptr_type = std::shared_ptr<shared_state_base>;
+        shared_state_ptr_type next_state{nullptr};
+        std::atomic<void*> op_state_head{nullptr};
+
+        shared_state_base() = default;
+        shared_state_base(shared_state_base&&) = delete;
+        shared_state_base& operator=(shared_state_base&&) = delete;
+        shared_state_base(shared_state_base const&) = delete;
+        shared_state_base& operator=(shared_state_base const&) = delete;
+
+        virtual ~shared_state_base()
         {
-            async_rw_mutex_copyability() noexcept = default;
-            async_rw_mutex_copyability(async_rw_mutex_copyability&&) noexcept = default;
-            async_rw_mutex_copyability& operator=(async_rw_mutex_copyability&&) noexcept = default;
-            async_rw_mutex_copyability(async_rw_mutex_copyability const&) noexcept = default;
-            async_rw_mutex_copyability& operator=(
-                async_rw_mutex_copyability const&) noexcept = default;
-        };
+            if (next_state)
+            {
+                // We are also not accessing this shared state directly anymore, so we reset
+                // the next_state before calling done to avoid continuations being triggered by
+                // this reference being the last reference (if done after swapping the head of
+                // the queue that happens in done). When resetting before the swap of the head
+                // of the queue, we also know this can't be the last reference since senders
+                // that reference the shared state can't be used without adding a continuation
+                // to the queue (a continuation will hold another reference to the shared
+                // state). Continuations can run inline, but that can only happen after the head
+                // of the queue has been swapped. In summary, there must be at least two
+                // references to the shared state at this point, so we can safely reset it early.
+                shared_state_base* p = next_state.get();
 
-        template <>
-        struct async_rw_mutex_copyability<async_rw_mutex_access_type::readwrite>
+                PIKA_ASSERT(next_state.use_count() > 1);
+                next_state.reset();
+
+                p->done();
+            }
+        }
+
+        void set_next_state(shared_state_ptr_type state) noexcept
         {
-            async_rw_mutex_copyability() noexcept = default;
-            async_rw_mutex_copyability(async_rw_mutex_copyability&&) noexcept = default;
-            async_rw_mutex_copyability& operator=(async_rw_mutex_copyability&&) noexcept = default;
-            async_rw_mutex_copyability(async_rw_mutex_copyability const&) = delete;
-            async_rw_mutex_copyability& operator=(async_rw_mutex_copyability const&) = delete;
-        };
+            // The next state should only be set once
+            PIKA_ASSERT(!next_state);
+            PIKA_ASSERT(state);
+            next_state = std::move(state);
+        }
 
-        struct async_rw_mutex_operation_state_base
+        bool add_op_state(operation_state_base* op_state) noexcept
         {
-            // This is most of the time an async_rw_mutex_operation_state_base*, but can also
-            // contain the special value of the address of the shared state, hence this is a void*.
-            void* next{nullptr};
-            virtual void continuation() noexcept = 0;
-        };
+            op_state->next =
+                static_cast<operation_state_base*>(op_state_head.load(std::memory_order_relaxed));
+            do {
+                if (op_state->next == static_cast<void*>(this)) { return false; }
+            } while (
+                !op_state_head.compare_exchange_weak(op_state->next, static_cast<void*>(op_state),
+                    std::memory_order_release, std::memory_order_relaxed));
 
-        struct async_rw_mutex_shared_state_base
+            return true;
+        }
+
+        void done_recurse(operation_state_base* current) noexcept
         {
-            using shared_state_ptr_type = std::shared_ptr<async_rw_mutex_shared_state_base>;
-            shared_state_ptr_type next_state{nullptr};
-            std::atomic<void*> op_state_head{nullptr};
+            if (current == nullptr) { return; }
+            done_recurse(static_cast<operation_state_base*>(current->next));
+            current->continuation();
+        }
 
-            async_rw_mutex_shared_state_base() = default;
-            async_rw_mutex_shared_state_base(async_rw_mutex_shared_state_base&&) = delete;
-            async_rw_mutex_shared_state_base& operator=(
-                async_rw_mutex_shared_state_base&&) = delete;
-            async_rw_mutex_shared_state_base(async_rw_mutex_shared_state_base const&) = delete;
-            async_rw_mutex_shared_state_base& operator=(
-                async_rw_mutex_shared_state_base const&) = delete;
-
-            virtual ~async_rw_mutex_shared_state_base()
-            {
-                if (next_state)
-                {
-                    // We are also not accessing this shared state directly anymore, so we reset
-                    // the next_state before calling done to avoid continuations being triggered by
-                    // this reference being the last reference (if done after swapping the head of
-                    // the queue that happens in done). When resetting before the swap of the head
-                    // of the queue, we also know this can't be the last reference since senders
-                    // that reference the shared state can't be used without adding a continuation
-                    // to the queue (a continuation will hold another reference to the shared
-                    // state). Continuations can run inline, but that can only happen after the head
-                    // of the queue has been swapped. In summary, there must be at least two
-                    // references to the shared state at this point, so we can safely reset it early.
-                    async_rw_mutex_shared_state_base* p = next_state.get();
-
-                    PIKA_ASSERT(next_state.use_count() > 1);
-                    next_state.reset();
-
-                    p->done();
-                }
-            }
-
-            void set_next_state(shared_state_ptr_type state) noexcept
-            {
-                // The next state should only be set once
-                PIKA_ASSERT(!next_state);
-                PIKA_ASSERT(state);
-                next_state = std::move(state);
-            }
-
-            bool add_op_state(async_rw_mutex_operation_state_base* op_state) noexcept
-            {
-                op_state->next = static_cast<async_rw_mutex_operation_state_base*>(
-                    op_state_head.load(std::memory_order_relaxed));
-                do {
-                    if (op_state->next == static_cast<void*>(this)) { return false; }
-                } while (!op_state_head.compare_exchange_weak(op_state->next,
-                    static_cast<void*>(op_state), std::memory_order_release,
-                    std::memory_order_relaxed));
-
-                return true;
-            }
-
-            void done_recurse(async_rw_mutex_operation_state_base* current) noexcept
-            {
-                if (current == nullptr) { return; }
-                done_recurse(static_cast<async_rw_mutex_operation_state_base*>(current->next));
-                current->continuation();
-            }
-
-            void done() noexcept
-            {
-                // `this` is not an async_rw_mutex_operation_state_base*, but is a known value to
-                // signal that the queue has been processed
-                auto* current = static_cast<async_rw_mutex_operation_state_base*>(
-                    op_state_head.exchange(static_cast<void*>(this), std::memory_order_acquire));
-
-                // We have now successfully acquired the head of the queue, and signaled to other
-                // threads that they can't add any more items to the queue. We can now process the
-                // queue without further synchronization.
-
-                // Because of the way operation states are linked together, they will be accessed in
-                // LIFO order (op_state_head points to the last operation state to be added, or
-                // nullptr). This can be surprising, so we recurse through the list and call the
-                // continuation on the way back up from the recursion, resulting in FIFO order for
-                // the continuations.
-                //
-                // We will not guarantee this behaviour, but it is a nice property to have.
-                done_recurse(current);
-            }
-        };
-
-        template <typename T>
-        struct async_rw_mutex_shared_state : async_rw_mutex_shared_state_base
+        void done() noexcept
         {
-            using value_ptr_type = std::shared_ptr<T>;
-            value_ptr_type value{nullptr};
+            // `this` is not an operation_state_base*, but is a known value to signal that the queue
+            // has been processed
+            auto* current = static_cast<operation_state_base*>(
+                op_state_head.exchange(static_cast<void*>(this), std::memory_order_acquire));
 
-            async_rw_mutex_shared_state(value_ptr_type value)
-              : value(std::move(value))
-            {
-            }
+            // We have now successfully acquired the head of the queue, and signaled to other
+            // threads that they can't add any more items to the queue. We can now process the
+            // queue without further synchronization.
 
-            T& get_value() noexcept
-            {
-                PIKA_ASSERT(value);
-                return *value;
-            }
-        };
+            // Because of the way operation states are linked together, they will be accessed in
+            // LIFO order (op_state_head points to the last operation state to be added, or
+            // nullptr). This can be surprising, so we recurse through the list and call the
+            // continuation on the way back up from the recursion, resulting in FIFO order for
+            // the continuations.
+            //
+            // We will not guarantee this behaviour, but it is a nice property to have.
+            done_recurse(current);
+        }
+    };
 
-        template <>
-        struct async_rw_mutex_shared_state<void> : async_rw_mutex_shared_state_base
+    template <typename T>
+    struct shared_state : shared_state_base
+    {
+        using value_ptr_type = std::shared_ptr<T>;
+        value_ptr_type value{nullptr};
+
+        shared_state(value_ptr_type value)
+          : value(std::move(value))
         {
-        };
+        }
 
-        template <typename ReadWriteT, typename ReadT, async_rw_mutex_access_type AccessType,
-            typename R>
-        struct async_rw_mutex_operation_state : async_rw_mutex_operation_state_base
+        T& get_value() noexcept
         {
-            using access_type = async_rw_mutex_access_wrapper<ReadWriteT, ReadT, AccessType>;
-            using shared_state_type = detail::async_rw_mutex_shared_state<ReadWriteT>;
-            using shared_state_ptr_type = std::shared_ptr<shared_state_type>;
+            PIKA_ASSERT(value);
+            return *value;
+        }
+    };
 
-            std::decay_t<R> r;
-            shared_state_ptr_type state;
+    template <>
+    struct shared_state<void> : shared_state_base
+    {
+    };
 
-            template <typename R_>
-            async_rw_mutex_operation_state(R_&& r, shared_state_ptr_type state)
-              : r(std::forward<R_>(r))
-              , state(std::move(state))
-            {
-            }
+    template <typename ReadWriteT, typename ReadT,
+        pika::execution::experimental::async_rw_mutex_access_type AccessType, typename R>
+    struct operation_state : operation_state_base
+    {
+        using access_type = pika::execution::experimental::async_rw_mutex_access_wrapper<ReadWriteT,
+            ReadT, AccessType>;
+        using shared_state_type = shared_state<ReadWriteT>;
+        using shared_state_ptr_type = std::shared_ptr<shared_state_type>;
 
-            async_rw_mutex_operation_state(async_rw_mutex_operation_state&&) = delete;
-            async_rw_mutex_operation_state& operator=(async_rw_mutex_operation_state&&) = delete;
-            async_rw_mutex_operation_state(async_rw_mutex_operation_state const&) = delete;
-            async_rw_mutex_operation_state& operator=(
-                async_rw_mutex_operation_state const&) = delete;
+        std::decay_t<R> r;
+        shared_state_ptr_type state;
 
-            ~async_rw_mutex_operation_state() noexcept
-            {
-                if (state)
-                {
-                    PIKA_LOG(err,
-                        "async_rw_mutex operation state was destroyed without the shared state "
-                        "being released, was the operation state never started?");
-                    std::terminate();
-                }
-            }
-
-            void continuation() noexcept override
-            {
-                try
-                {
-                    pika::execution::experimental::set_value(
-                        std::move(r), access_type{std::move(state)});
-                }
-                catch (...)
-                {
-                    state.reset();
-                    pika::execution::experimental::set_error(
-                        std::move(r), std::current_exception());
-                }
-            }
-
-            friend void tag_invoke(
-                pika::execution::experimental::start_t, async_rw_mutex_operation_state& os) noexcept
-            {
-                PIKA_ASSERT_MSG(os.state,
-                    "async_rw_mutex operation state shared state is empty, was the sender already "
-                    "started?");
-
-                if (!os.state->add_op_state(&os))
-                {
-                    // There is no previous state on the first access or the
-                    // previous state has already been released. We can run
-                    // the continuation immediately.
-                    os.continuation();
-                }
-            }
-        };
-
-        template <typename ReadWriteT, typename ReadT, async_rw_mutex_access_type AccessType>
-        struct async_rw_mutex_sender : private detail::async_rw_mutex_copyability<AccessType>
+        template <typename R_>
+        operation_state(R_&& r, shared_state_ptr_type state)
+          : r(std::forward<R_>(r))
+          , state(std::move(state))
         {
-            PIKA_STDEXEC_SENDER_CONCEPT
+        }
 
-            using shared_state_type = detail::async_rw_mutex_shared_state<ReadWriteT>;
-            using shared_state_ptr_type = std::shared_ptr<shared_state_type>;
+        operation_state(operation_state&&) = delete;
+        operation_state& operator=(operation_state&&) = delete;
+        operation_state(operation_state const&) = delete;
+        operation_state& operator=(operation_state const&) = delete;
 
-            shared_state_ptr_type state;
-
-            using access_type = async_rw_mutex_access_wrapper<ReadWriteT, ReadT, AccessType>;
-            template <template <typename...> class Tuple, template <typename...> class Variant>
-            using value_types = Variant<Tuple<access_type>>;
-
-            template <template <typename...> class Variant>
-            using error_types = Variant<std::exception_ptr>;
-
-            static constexpr bool sends_done = false;
-
-            using completion_signatures = pika::execution::experimental::completion_signatures<
-                pika::execution::experimental::set_value_t(access_type),
-                pika::execution::experimental::set_error_t(std::exception_ptr)>;
-
-            template <typename Receiver>
-            using operation_state_type =
-                detail::async_rw_mutex_operation_state<ReadWriteT, ReadT, AccessType, Receiver>;
-
-            explicit async_rw_mutex_sender(shared_state_ptr_type state) noexcept
-              : state(std::move(state))
-            {
-            }
-
-            async_rw_mutex_sender(async_rw_mutex_sender&&) noexcept = default;
-            async_rw_mutex_sender& operator=(async_rw_mutex_sender&&) noexcept = default;
-            async_rw_mutex_sender(async_rw_mutex_sender const&) noexcept = default;
-            async_rw_mutex_sender& operator=(async_rw_mutex_sender const&) noexcept = default;
-
-            ~async_rw_mutex_sender() noexcept
-            {
-                if (state)
-                {
-                    PIKA_LOG(err,
-                        "async_rw_mutex sender was destroyed without the shared state being "
-                        "released, was the sender never connected?");
-                    std::terminate();
-                }
-            }
-
-            template <typename Receiver>
-            friend operation_state_type<Receiver> tag_invoke(
-                pika::execution::experimental::connect_t, async_rw_mutex_sender&& s, Receiver&& r)
-            {
-                return operation_state_type<Receiver>{
-                    std::forward<Receiver>(r), std::move(s.state)};
-            }
-
-            template <typename Receiver>
-            friend auto tag_invoke(pika::execution::experimental::connect_t,
-                async_rw_mutex_sender const& s, Receiver&& r)
-            {
-                if constexpr (AccessType == async_rw_mutex_access_type::readwrite)
-                {
-                    static_assert(sizeof(Receiver) == 0,
-                        "Are you missing a std::move? The async_rw_mutex sender in read-write mode "
-                        "is not copyable and thus not l-value connectable. Make sure you are "
-                        "passing a non-const r-value reference of the sender or accessing the "
-                        "sender in the correct mode.");
-                }
-
-                return operation_state_type<Receiver>{std::forward<Receiver>(r), s.state};
-            }
-        };
-
-        template <typename ReadWriteT, typename ReadT, typename Allocator>
-        class async_rw_mutex_base
+        ~operation_state() noexcept
         {
-        protected:
-            using shared_state_type = detail::async_rw_mutex_shared_state<ReadWriteT>;
-            using shared_state_ptr_type = std::shared_ptr<shared_state_type>;
-
-            template <async_rw_mutex_access_type AccessType>
-            using sender_type = detail::async_rw_mutex_sender<ReadWriteT, ReadT, AccessType>;
-
-        public:
-            using read_type = ReadT;
-            using readwrite_type = ReadWriteT;
-            using read_access_type = async_rw_mutex_access_wrapper<readwrite_type, read_type,
-                async_rw_mutex_access_type::read>;
-            using readwrite_access_type = async_rw_mutex_access_wrapper<readwrite_type, read_type,
-                async_rw_mutex_access_type::readwrite>;
-            using read_sender_type = sender_type<async_rw_mutex_access_type::read>;
-            using readwrite_sender_type = sender_type<async_rw_mutex_access_type::readwrite>;
-            using allocator_type = std::decay_t<Allocator>;
-
-            async_rw_mutex_base() = delete;
-            explicit async_rw_mutex_base(allocator_type alloc)
-              : alloc(std::move(alloc))
+            if (state)
             {
+                PIKA_LOG(err,
+                    "async_rw_mutex operation state was destroyed without the shared state "
+                    "being released, was the operation state never started?");
+                std::terminate();
             }
-            async_rw_mutex_base(async_rw_mutex_base&&) noexcept = default;
-            async_rw_mutex_base& operator=(async_rw_mutex_base&&) noexcept = default;
-            async_rw_mutex_base(async_rw_mutex_base const&) = delete;
-            async_rw_mutex_base& operator=(async_rw_mutex_base const&) = delete;
+        }
 
-        protected:
-            PIKA_NO_UNIQUE_ADDRESS allocator_type alloc;
-            shared_state_ptr_type state;
-            async_rw_mutex_access_type prev_access = async_rw_mutex_access_type::readwrite;
-
-            template <typename... Ts>
-            read_sender_type read(Ts&... ts)
+        void continuation() noexcept override
+        {
+            try
             {
-                if (prev_access == async_rw_mutex_access_type::readwrite)
-                {
-                    auto prev_state = std::move(state);
-                    state = std::allocate_shared<shared_state_type, allocator_type>(alloc, ts...);
-                    prev_access = async_rw_mutex_access_type::read;
+                pika::execution::experimental::set_value(
+                    std::move(r), access_type{std::move(state)});
+            }
+            catch (...)
+            {
+                state.reset();
+                pika::execution::experimental::set_error(std::move(r), std::current_exception());
+            }
+        }
 
-                    // Only the first access has no previous shared state.
-                    if (PIKA_LIKELY(prev_state)) { prev_state->set_next_state(state); }
-                    else { state->done(); }
-                }
+        friend void tag_invoke(pika::execution::experimental::start_t, operation_state& os) noexcept
+        {
+            PIKA_ASSERT_MSG(os.state,
+                "async_rw_mutex operation state shared state is empty, was the sender already "
+                "started?");
 
-                return read_sender_type{state};
+            if (!os.state->add_op_state(&os))
+            {
+                // There is no previous state on the first access or the
+                // previous state has already been released. We can run
+                // the continuation immediately.
+                os.continuation();
+            }
+        }
+    };
+
+    template <typename ReadWriteT, typename ReadT,
+        pika::execution::experimental::async_rw_mutex_access_type AccessType>
+    struct sender : private copyability<AccessType>
+    {
+        PIKA_STDEXEC_SENDER_CONCEPT
+
+        using shared_state_type = shared_state<ReadWriteT>;
+        using shared_state_ptr_type = std::shared_ptr<shared_state_type>;
+
+        shared_state_ptr_type state;
+
+        using access_type = pika::execution::experimental::async_rw_mutex_access_wrapper<ReadWriteT,
+            ReadT, AccessType>;
+        template <template <typename...> class Tuple, template <typename...> class Variant>
+        using value_types = Variant<Tuple<access_type>>;
+
+        template <template <typename...> class Variant>
+        using error_types = Variant<std::exception_ptr>;
+
+        static constexpr bool sends_done = false;
+
+        using completion_signatures = pika::execution::experimental::completion_signatures<
+            pika::execution::experimental::set_value_t(access_type),
+            pika::execution::experimental::set_error_t(std::exception_ptr)>;
+
+        template <typename Receiver>
+        using operation_state_type = operation_state<ReadWriteT, ReadT, AccessType, Receiver>;
+
+        explicit sender(shared_state_ptr_type state) noexcept
+          : state(std::move(state))
+        {
+        }
+
+        sender(sender&&) noexcept = default;
+        sender& operator=(sender&&) noexcept = default;
+        sender(sender const&) noexcept = default;
+        sender& operator=(sender const&) noexcept = default;
+
+        ~sender() noexcept
+        {
+            if (state)
+            {
+                PIKA_LOG(err,
+                    "async_rw_mutex sender was destroyed without the shared state being "
+                    "released, was the sender never connected?");
+                std::terminate();
+            }
+        }
+
+        template <typename Receiver>
+        friend operation_state_type<Receiver>
+        tag_invoke(pika::execution::experimental::connect_t, sender&& s, Receiver&& r)
+        {
+            return operation_state_type<Receiver>{std::forward<Receiver>(r), std::move(s.state)};
+        }
+
+        template <typename Receiver>
+        friend auto
+        tag_invoke(pika::execution::experimental::connect_t, sender const& s, Receiver&& r)
+        {
+            if constexpr (AccessType ==
+                pika::execution::experimental::async_rw_mutex_access_type::readwrite)
+            {
+                static_assert(sizeof(Receiver) == 0,
+                    "Are you missing a std::move? The async_rw_mutex sender in read-write mode "
+                    "is not copyable and thus not l-value connectable. Make sure you are "
+                    "passing a non-const r-value reference of the sender or accessing the "
+                    "sender in the correct mode.");
             }
 
-            template <typename... Ts>
-            readwrite_sender_type readwrite(Ts... ts)
+            return operation_state_type<Receiver>{std::forward<Receiver>(r), s.state};
+        }
+    };
+
+    template <typename ReadWriteT, typename ReadT, typename Allocator>
+    class async_rw_mutex_base
+    {
+    protected:
+        using shared_state_type = shared_state<ReadWriteT>;
+        using shared_state_ptr_type = std::shared_ptr<shared_state_type>;
+
+        template <pika::execution::experimental::async_rw_mutex_access_type AccessType>
+        using sender_type = sender<ReadWriteT, ReadT, AccessType>;
+
+    public:
+        using read_type = ReadT;
+        using readwrite_type = ReadWriteT;
+        using read_access_type =
+            pika::execution::experimental::async_rw_mutex_access_wrapper<readwrite_type, read_type,
+                pika::execution::experimental::async_rw_mutex_access_type::read>;
+        using readwrite_access_type =
+            pika::execution::experimental::async_rw_mutex_access_wrapper<readwrite_type, read_type,
+                pika::execution::experimental::async_rw_mutex_access_type::readwrite>;
+        using read_sender_type =
+            sender_type<pika::execution::experimental::async_rw_mutex_access_type::read>;
+        using readwrite_sender_type =
+            sender_type<pika::execution::experimental::async_rw_mutex_access_type::readwrite>;
+        using allocator_type = std::decay_t<Allocator>;
+
+        async_rw_mutex_base() = delete;
+        explicit async_rw_mutex_base(allocator_type alloc)
+          : alloc(std::move(alloc))
+        {
+        }
+        async_rw_mutex_base(async_rw_mutex_base&&) noexcept = default;
+        async_rw_mutex_base& operator=(async_rw_mutex_base&&) noexcept = default;
+        async_rw_mutex_base(async_rw_mutex_base const&) = delete;
+        async_rw_mutex_base& operator=(async_rw_mutex_base const&) = delete;
+
+    protected:
+        PIKA_NO_UNIQUE_ADDRESS allocator_type alloc;
+        shared_state_ptr_type state;
+        pika::execution::experimental::async_rw_mutex_access_type prev_access =
+            pika::execution::experimental::async_rw_mutex_access_type::readwrite;
+
+        template <typename... Ts>
+        read_sender_type read(Ts&... ts)
+        {
+            if (prev_access == pika::execution::experimental::async_rw_mutex_access_type::readwrite)
             {
                 auto prev_state = std::move(state);
                 state = std::allocate_shared<shared_state_type, allocator_type>(alloc, ts...);
-                prev_access = async_rw_mutex_access_type::readwrite;
+                prev_access = pika::execution::experimental::async_rw_mutex_access_type::read;
 
                 // Only the first access has no previous shared state.
                 if (PIKA_LIKELY(prev_state)) { prev_state->set_next_state(state); }
                 else { state->done(); }
-
-                return readwrite_sender_type{state};
             }
-        };
-    }    // namespace detail
 
+            return read_sender_type{state};
+        }
+
+        template <typename... Ts>
+        readwrite_sender_type readwrite(Ts... ts)
+        {
+            auto prev_state = std::move(state);
+            state = std::allocate_shared<shared_state_type, allocator_type>(alloc, ts...);
+            prev_access = pika::execution::experimental::async_rw_mutex_access_type::readwrite;
+
+            // Only the first access has no previous shared state.
+            if (PIKA_LIKELY(prev_state)) { prev_state->set_next_state(state); }
+            else { state->done(); }
+
+            return readwrite_sender_type{state};
+        }
+    };
+}    // namespace pika::async_rw_mutex_detail
+
+namespace pika::execution::experimental {
     /// \brief A wrapper for values sent by senders from \ref async_rw_mutex with read-only access.
     ///
     /// The wrapper is copyable.
@@ -490,7 +493,8 @@ namespace pika::execution::experimental {
     class async_rw_mutex_access_wrapper<ReadWriteT, ReadT, async_rw_mutex_access_type::read>
     {
     private:
-        using shared_state_type = std::shared_ptr<detail::async_rw_mutex_shared_state<ReadWriteT>>;
+        using shared_state_type =
+            std::shared_ptr<pika::async_rw_mutex_detail::shared_state<ReadWriteT>>;
         shared_state_type state;
 
     public:
@@ -528,7 +532,8 @@ namespace pika::execution::experimental {
             "Cannot mix void and non-void type in async_rw_mutex_access_wrapper wrapper (ReadT "
             "is void, ReadWriteT is non-void)");
 
-        using shared_state_type = std::shared_ptr<detail::async_rw_mutex_shared_state<ReadWriteT>>;
+        using shared_state_type =
+            std::shared_ptr<pika::async_rw_mutex_detail::shared_state<ReadWriteT>>;
         shared_state_type state;
 
     public:
@@ -562,7 +567,7 @@ namespace pika::execution::experimental {
     class async_rw_mutex_access_wrapper<void, void, async_rw_mutex_access_type::read>
     {
     private:
-        using shared_state_type = std::shared_ptr<detail::async_rw_mutex_shared_state<void>>;
+        using shared_state_type = std::shared_ptr<pika::async_rw_mutex_detail::shared_state<void>>;
         shared_state_type state;
 
     public:
@@ -586,7 +591,7 @@ namespace pika::execution::experimental {
     class async_rw_mutex_access_wrapper<void, void, async_rw_mutex_access_type::readwrite>
     {
     private:
-        using shared_state_type = std::shared_ptr<detail::async_rw_mutex_shared_state<void>>;
+        using shared_state_type = std::shared_ptr<pika::async_rw_mutex_detail::shared_state<void>>;
         shared_state_type state;
 
     public:
@@ -638,10 +643,10 @@ namespace pika::execution::experimental {
 
     template <typename Allocator>
     class async_rw_mutex<void, void, Allocator>
-      : public detail::async_rw_mutex_base<void, void, Allocator>
+      : public pika::async_rw_mutex_detail::async_rw_mutex_base<void, void, Allocator>
     {
     private:
-        using base_type = detail::async_rw_mutex_base<void, void, Allocator>;
+        using base_type = pika::async_rw_mutex_detail::async_rw_mutex_base<void, void, Allocator>;
         using shared_state_type = typename base_type::shared_state_type;
         using shared_state_ptr_type = typename base_type::shared_state_ptr_type;
         template <async_rw_mutex_access_type AccessType>
@@ -673,8 +678,8 @@ namespace pika::execution::experimental {
 
     template <typename ReadWriteT, typename ReadT, typename Allocator>
     class async_rw_mutex
-      : public detail::async_rw_mutex_base<std::decay_t<ReadWriteT>, std::decay_t<ReadT> const,
-            Allocator>
+      : public pika::async_rw_mutex_detail::async_rw_mutex_base<std::decay_t<ReadWriteT>,
+            std::decay_t<ReadT> const, Allocator>
     {
     private:
         static_assert(!std::is_void<ReadWriteT>::value,
@@ -684,7 +689,7 @@ namespace pika::execution::experimental {
             "Cannot mix void and non-void type in async_rw_mutex (ReadT is void, ReadWriteT is "
             "non-void)");
 
-        using base_type = detail::async_rw_mutex_base<std::decay_t<ReadWriteT>,
+        using base_type = pika::async_rw_mutex_detail::async_rw_mutex_base<std::decay_t<ReadWriteT>,
             std::decay_t<ReadT> const, Allocator>;
         using shared_state_type = typename base_type::shared_state_type;
         using shared_state_ptr_type = typename base_type::shared_state_ptr_type;
