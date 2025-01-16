@@ -117,6 +117,18 @@ namespace pika::execution::experimental {
         readwrite
     };
 
+    /// \brief A wrapper for values sent by senders from \ref async_rw_mutex.
+    ///
+    /// All values sent by senders accessed through \ref async_rw_mutex are wrapped by this class.
+    /// The wrapper has reference semantics to the wrapped object, and controls when subsequent
+    /// accesses is given. When the destructor of the last or only wrapper runs, senders for
+    /// subsequent accesses will signal their value channel.
+    ///
+    /// When the access type is \ref async_rw_mutex_access_type::readwrite the wrapper is move-only.
+    /// When the access type is \ref async_rw_mutex_access_type::read the wrapper is copyable.
+    template <typename ReadWriteT, typename ReadT, async_rw_mutex_access_type AccessType>
+    class async_rw_mutex_access_wrapper;
+
     namespace detail {
         // Helper base class to control whether a type is copyable or not. Useful to make sure e.g.
         // read-write classes are move-only and read-only classes are copyable.
@@ -263,19 +275,74 @@ namespace pika::execution::experimental {
         struct async_rw_mutex_shared_state<void> : async_rw_mutex_shared_state_base
         {
         };
-    }    // namespace detail
 
-    /// \brief A wrapper for values sent by senders from \ref async_rw_mutex.
-    ///
-    /// All values sent by senders accessed through \ref async_rw_mutex are wrapped by this class.
-    /// The wrapper has reference semantics to the wrapped object, and controls when subsequent
-    /// accesses is given. When the destructor of the last or only wrapper runs, senders for
-    /// subsequent accesses will signal their value channel.
-    ///
-    /// When the access type is \ref async_rw_mutex_access_type::readwrite the wrapper is move-only.
-    /// When the access type is \ref async_rw_mutex_access_type::read the wrapper is copyable.
-    template <typename ReadWriteT, typename ReadT, async_rw_mutex_access_type AccessType>
-    class async_rw_mutex_access_wrapper;
+        template <typename ReadWriteT, typename ReadT, async_rw_mutex_access_type AccessType,
+            typename R>
+        struct async_rw_mutex_operation_state : async_rw_mutex_operation_state_base
+        {
+            using access_type = async_rw_mutex_access_wrapper<ReadWriteT, ReadT, AccessType>;
+            using shared_state_type = detail::async_rw_mutex_shared_state<ReadWriteT>;
+            using shared_state_ptr_type = std::shared_ptr<shared_state_type>;
+
+            std::decay_t<R> r;
+            shared_state_ptr_type state;
+
+            template <typename R_>
+            async_rw_mutex_operation_state(R_&& r, shared_state_ptr_type state)
+              : r(std::forward<R_>(r))
+              , state(std::move(state))
+            {
+            }
+
+            async_rw_mutex_operation_state(async_rw_mutex_operation_state&&) = delete;
+            async_rw_mutex_operation_state& operator=(async_rw_mutex_operation_state&&) = delete;
+            async_rw_mutex_operation_state(async_rw_mutex_operation_state const&) = delete;
+            async_rw_mutex_operation_state& operator=(
+                async_rw_mutex_operation_state const&) = delete;
+
+            ~async_rw_mutex_operation_state() noexcept
+            {
+                if (state)
+                {
+                    PIKA_LOG(err,
+                        "async_rw_mutex operation state was destroyed without the shared state "
+                        "being released, was the operation state never started?");
+                    std::terminate();
+                }
+            }
+
+            void continuation() noexcept override
+            {
+                try
+                {
+                    pika::execution::experimental::set_value(
+                        std::move(r), access_type{std::move(state)});
+                }
+                catch (...)
+                {
+                    state.reset();
+                    pika::execution::experimental::set_error(
+                        std::move(r), std::current_exception());
+                }
+            }
+
+            friend void tag_invoke(
+                pika::execution::experimental::start_t, async_rw_mutex_operation_state& os) noexcept
+            {
+                PIKA_ASSERT_MSG(os.state,
+                    "async_rw_mutex operation state shared state is empty, was the sender already "
+                    "started?");
+
+                if (!os.state->add_op_state(&os))
+                {
+                    // There is no previous state on the first access or the
+                    // previous state has already been released. We can run
+                    // the continuation immediately.
+                    os.continuation();
+                }
+            }
+        };
+    }    // namespace detail
 
     /// \brief A wrapper for values sent by senders from \ref async_rw_mutex with read-only access.
     ///
@@ -525,6 +592,10 @@ namespace pika::execution::experimental {
                 pika::execution::experimental::set_value_t(access_type),
                 pika::execution::experimental::set_error_t(std::exception_ptr)>;
 
+            template <typename Receiver>
+            using operation_state_type = detail::async_rw_mutex_operation_state<readwrite_type,
+                read_type, AccessType, Receiver>;
+
             explicit sender(shared_state_ptr_type state) noexcept
               : state(std::move(state))
             {
@@ -546,86 +617,28 @@ namespace pika::execution::experimental {
                 }
             }
 
-            template <typename R>
-            struct operation_state : detail::async_rw_mutex_operation_state_base
+            template <typename Receiver>
+            friend operation_state_type<Receiver>
+            tag_invoke(pika::execution::experimental::connect_t, sender&& s, Receiver&& r)
             {
-                std::decay_t<R> r;
-                shared_state_ptr_type state;
-
-                template <typename R_>
-                operation_state(R_&& r, shared_state_ptr_type state)
-                  : r(std::forward<R_>(r))
-                  , state(std::move(state))
-                {
-                }
-
-                operation_state(operation_state&&) = delete;
-                operation_state& operator=(operation_state&&) = delete;
-                operation_state(operation_state const&) = delete;
-                operation_state& operator=(operation_state const&) = delete;
-
-                ~operation_state() noexcept
-                {
-                    if (state)
-                    {
-                        PIKA_LOG(err,
-                            "async_rw_mutex operation state was destroyed without the shared state "
-                            "being released, was the operation state never started?");
-                        std::terminate();
-                    }
-                }
-
-                void continuation() noexcept override
-                {
-                    try
-                    {
-                        pika::execution::experimental::set_value(
-                            std::move(r), access_type{std::move(state)});
-                    }
-                    catch (...)
-                    {
-                        state.reset();
-                        pika::execution::experimental::set_error(
-                            std::move(r), std::current_exception());
-                    }
-                }
-
-                friend void tag_invoke(
-                    pika::execution::experimental::start_t, operation_state& os) noexcept
-                {
-                    PIKA_ASSERT_MSG(os.state,
-                        "async_rw_lock::sender::operation_state state is empty, was the sender "
-                        "already started?");
-
-                    if (!os.state->add_op_state(&os))
-                    {
-                        // There is no previous state on the first access or the
-                        // previous state has already been released. We can run
-                        // the continuation immediately.
-                        os.continuation();
-                    }
-                }
-            };
-
-            template <typename R>
-            friend auto tag_invoke(pika::execution::experimental::connect_t, sender&& s, R&& r)
-            {
-                return operation_state<R>{std::forward<R>(r), std::move(s.state)};
+                return operation_state_type<Receiver>{
+                    std::forward<Receiver>(r), std::move(s.state)};
             }
 
-            template <typename R>
-            friend auto tag_invoke(pika::execution::experimental::connect_t, sender const& s, R&& r)
+            template <typename Receiver>
+            friend operation_state_type<Receiver>
+            tag_invoke(pika::execution::experimental::connect_t, sender const& s, Receiver&& r)
             {
                 if constexpr (AccessType == async_rw_mutex_access_type::readwrite)
                 {
-                    static_assert(sizeof(R) == 0,
+                    static_assert(sizeof(Receiver) == 0,
                         "Are you missing a std::move? The async_rw_mutex sender in read-write mode "
                         "is not copyable and thus not l-value connectable. Make sure you are "
                         "passing a non-const r-value reference of the sender or accessing the "
                         "sender in the correct mode.");
                 }
 
-                return operation_state<R>{std::forward<R>(r), s.state};
+                return operation_state_type<Receiver>{std::forward<Receiver>(r), s.state};
             }
         };
 
@@ -761,6 +774,10 @@ namespace pika::execution::experimental {
                 pika::execution::experimental::set_value_t(access_type),
                 pika::execution::experimental::set_error_t(std::exception_ptr)>;
 
+            template <typename Receiver>
+            using operation_state_type = detail::async_rw_mutex_operation_state<readwrite_type,
+                read_type, AccessType, Receiver>;
+
             explicit sender(shared_state_ptr_type state) noexcept
               : state(std::move(state))
             {
@@ -782,86 +799,28 @@ namespace pika::execution::experimental {
                 }
             }
 
-            template <typename R>
-            struct operation_state : detail::async_rw_mutex_operation_state_base
+            template <typename Receiver>
+            friend operation_state_type<Receiver>
+            tag_invoke(pika::execution::experimental::connect_t, sender&& s, Receiver&& r)
             {
-                std::decay_t<R> r;
-                shared_state_ptr_type state;
-
-                template <typename R_>
-                operation_state(R_&& r, shared_state_ptr_type state)
-                  : r(std::forward<R_>(r))
-                  , state(std::move(state))
-                {
-                }
-
-                operation_state(operation_state&&) = delete;
-                operation_state& operator=(operation_state&&) = delete;
-                operation_state(operation_state const&) = delete;
-                operation_state& operator=(operation_state const&) = delete;
-
-                ~operation_state() noexcept
-                {
-                    if (state)
-                    {
-                        PIKA_LOG(err,
-                            "async_rw_mutex operation state was destroyed without the shared state "
-                            "being released, was the operation state never started?");
-                        std::terminate();
-                    }
-                }
-
-                void continuation() noexcept override
-                {
-                    try
-                    {
-                        pika::execution::experimental::set_value(
-                            std::move(r), access_type{std::move(state)});
-                    }
-                    catch (...)
-                    {
-                        state.reset();
-                        pika::execution::experimental::set_error(
-                            std::move(r), std::current_exception());
-                    }
-                }
-
-                friend void tag_invoke(
-                    pika::execution::experimental::start_t, operation_state& os) noexcept
-                {
-                    PIKA_ASSERT_MSG(os.state,
-                        "async_rw_lock::sender::operation_state state is empty, was the sender "
-                        "already started?");
-
-                    if (!os.state->add_op_state(&os))
-                    {
-                        // There is no previous state on the first access or the
-                        // previous state has already been released. We can run
-                        // the continuation immediately.
-                        os.continuation();
-                    }
-                }
-            };
-
-            template <typename R>
-            friend auto tag_invoke(pika::execution::experimental::connect_t, sender&& s, R&& r)
-            {
-                return operation_state<R>{std::forward<R>(r), std::move(s.state)};
+                return operation_state_type<Receiver>{
+                    std::forward<Receiver>(r), std::move(s.state)};
             }
 
-            template <typename R>
-            friend auto tag_invoke(pika::execution::experimental::connect_t, sender const& s, R&& r)
+            template <typename Receiver>
+            friend auto
+            tag_invoke(pika::execution::experimental::connect_t, sender const& s, Receiver&& r)
             {
                 if constexpr (AccessType == async_rw_mutex_access_type::readwrite)
                 {
-                    static_assert(sizeof(R) == 0,
+                    static_assert(sizeof(Receiver) == 0,
                         "Are you missing a std::move? The async_rw_mutex sender in read-write mode "
                         "is not copyable and thus not l-value connectable. Make sure you are "
                         "passing a non-const r-value reference of the sender or accessing the "
                         "sender in the correct mode.");
                 }
 
-                return operation_state<R>{std::forward<R>(r), s.state};
+                return operation_state_type<Receiver>{std::forward<Receiver>(r), s.state};
             }
         };
 
