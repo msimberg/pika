@@ -11,6 +11,7 @@
 #include <pika/execution_base/operation_state.hpp>
 #include <pika/execution_base/receiver.hpp>
 #include <pika/execution_base/sender.hpp>
+#include <pika/logging.hpp>
 
 #include <atomic>
 #include <cstddef>
@@ -534,6 +535,17 @@ namespace pika::execution::experimental {
             sender(sender const&) noexcept = default;
             sender& operator=(sender const&) noexcept = default;
 
+            ~sender() noexcept
+            {
+                if (state)
+                {
+                    PIKA_LOG(err,
+                        "async_rw_mutex sender was destroyed without the shared state being "
+                        "released, was the sender never connected?");
+                    std::terminate();
+                }
+            }
+
             template <typename R>
             struct operation_state : detail::async_rw_mutex_operation_state_base
             {
@@ -551,6 +563,17 @@ namespace pika::execution::experimental {
                 operation_state& operator=(operation_state&&) = delete;
                 operation_state(operation_state const&) = delete;
                 operation_state& operator=(operation_state const&) = delete;
+
+                ~operation_state() noexcept
+                {
+                    if (state)
+                    {
+                        PIKA_LOG(err,
+                            "async_rw_mutex operation state was destroyed without the shared state "
+                            "being released, was the operation state never started?");
+                        std::terminate();
+                    }
+                }
 
                 void continuation() noexcept override
                 {
@@ -748,6 +771,17 @@ namespace pika::execution::experimental {
             sender(sender const&) noexcept = default;
             sender& operator=(sender const&) noexcept = default;
 
+            ~sender() noexcept
+            {
+                if (state)
+                {
+                    PIKA_LOG(err,
+                        "async_rw_mutex sender was destroyed without the shared state being "
+                        "released, was the sender never connected?");
+                    std::terminate();
+                }
+            }
+
             template <typename R>
             struct operation_state : detail::async_rw_mutex_operation_state_base
             {
@@ -765,6 +799,17 @@ namespace pika::execution::experimental {
                 operation_state& operator=(operation_state&&) = delete;
                 operation_state(operation_state const&) = delete;
                 operation_state& operator=(operation_state const&) = delete;
+
+                ~operation_state() noexcept
+                {
+                    if (state)
+                    {
+                        PIKA_LOG(err,
+                            "async_rw_mutex operation state was destroyed without the shared state "
+                            "being released, was the operation state never started?");
+                        std::terminate();
+                    }
+                }
 
                 void continuation() noexcept override
                 {
