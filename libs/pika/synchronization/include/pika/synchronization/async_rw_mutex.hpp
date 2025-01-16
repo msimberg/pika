@@ -257,11 +257,9 @@ namespace pika::execution::experimental {
             using value_ptr_type = std::shared_ptr<T>;
             value_ptr_type value{nullptr};
 
-            void set_value(value_ptr_type v) noexcept
+            async_rw_mutex_shared_state(value_ptr_type value)
+              : value(std::move(value))
             {
-                PIKA_ASSERT(v);
-                PIKA_ASSERT(!value);
-                value = std::move(v);
             }
 
             T& get_value() noexcept
@@ -413,6 +411,74 @@ namespace pika::execution::experimental {
                 }
 
                 return operation_state_type<Receiver>{std::forward<Receiver>(r), s.state};
+            }
+        };
+
+        template <typename ReadWriteT, typename ReadT, typename Allocator>
+        class async_rw_mutex_base
+        {
+        protected:
+            using shared_state_type = detail::async_rw_mutex_shared_state<ReadWriteT>;
+            using shared_state_ptr_type = std::shared_ptr<shared_state_type>;
+
+            template <async_rw_mutex_access_type AccessType>
+            using sender_type = detail::async_rw_mutex_sender<ReadWriteT, ReadT, AccessType>;
+
+        public:
+            using read_type = ReadT;
+            using readwrite_type = ReadWriteT;
+            using read_access_type = async_rw_mutex_access_wrapper<readwrite_type, read_type,
+                async_rw_mutex_access_type::read>;
+            using readwrite_access_type = async_rw_mutex_access_wrapper<readwrite_type, read_type,
+                async_rw_mutex_access_type::readwrite>;
+            using read_sender_type = sender_type<async_rw_mutex_access_type::read>;
+            using readwrite_sender_type = sender_type<async_rw_mutex_access_type::readwrite>;
+            using allocator_type = std::decay_t<Allocator>;
+
+            async_rw_mutex_base() = delete;
+            explicit async_rw_mutex_base(allocator_type alloc)
+              : alloc(std::move(alloc))
+            {
+            }
+            async_rw_mutex_base(async_rw_mutex_base&&) noexcept = default;
+            async_rw_mutex_base& operator=(async_rw_mutex_base&&) noexcept = default;
+            async_rw_mutex_base(async_rw_mutex_base const&) = delete;
+            async_rw_mutex_base& operator=(async_rw_mutex_base const&) = delete;
+
+        protected:
+            PIKA_NO_UNIQUE_ADDRESS allocator_type alloc;
+            shared_state_ptr_type state;
+            async_rw_mutex_access_type prev_access = async_rw_mutex_access_type::readwrite;
+
+            template <typename... Ts>
+            read_sender_type read(Ts&... ts)
+            {
+                if (prev_access == async_rw_mutex_access_type::readwrite)
+                {
+                    auto prev_state = std::move(state);
+                    state = std::allocate_shared<shared_state_type, allocator_type>(alloc, ts...);
+                    prev_access = async_rw_mutex_access_type::read;
+
+                    // Only the first access has no previous shared state.
+                    if (PIKA_LIKELY(prev_state)) { prev_state->set_next_state(state); }
+                    else { state->done(); }
+                }
+
+                return read_sender_type{state};
+            }
+
+            template <typename... Ts>
+            readwrite_sender_type readwrite(Ts... ts)
+            {
+                auto prev_state = std::move(state);
+                state = std::allocate_shared<shared_state_type, allocator_type>(alloc, ts...);
+                prev_access = async_rw_mutex_access_type::readwrite;
+
+                // Only the first access has no previous shared state.
+                if (PIKA_LIKELY(prev_state)) { prev_state->set_next_state(state); }
+                else { state->done(); }
+
+                return readwrite_sender_type{state};
             }
         };
     }    // namespace detail
@@ -572,36 +638,28 @@ namespace pika::execution::experimental {
 
     template <typename Allocator>
     class async_rw_mutex<void, void, Allocator>
+      : public detail::async_rw_mutex_base<void, void, Allocator>
     {
     private:
+        using base_type = detail::async_rw_mutex_base<void, void, Allocator>;
+        using shared_state_type = typename base_type::shared_state_type;
+        using shared_state_ptr_type = typename base_type::shared_state_ptr_type;
         template <async_rw_mutex_access_type AccessType>
-        using sender_type = detail::async_rw_mutex_sender<void, void, AccessType>;
+        using sender_type = typename base_type::sender_type<AccessType>;
 
-        using shared_state_type = detail::async_rw_mutex_shared_state<void>;
-        using shared_state_weak_ptr_type = std::weak_ptr<shared_state_type>;
-
-        // nvc++ is not able to see this typedef unless it's public
-#if defined(PIKA_NVHPC_VERSION)
-    public:
-#endif
-        using shared_state_ptr_type = std::shared_ptr<shared_state_type>;
+        using base_type::alloc;
 
     public:
-        using read_type = void;
-        using readwrite_type = void;
+        using read_type = typename base_type::read_type;
+        using readwrite_type = typename base_type::readwrite_type;
+        using read_access_type = typename base_type::read_access_type;
+        using readwrite_access_type = typename base_type::readwrite_access_type;
+        using read_sender_type = typename base_type::read_sender_type;
+        using readwrite_sender_type = typename base_type::readwrite_sender_type;
+        using allocator_type = typename base_type::allocator_type;
 
-        using read_access_type = async_rw_mutex_access_wrapper<readwrite_type, read_type,
-            async_rw_mutex_access_type::read>;
-        using readwrite_access_type = async_rw_mutex_access_wrapper<readwrite_type, read_type,
-            async_rw_mutex_access_type::readwrite>;
-
-        using read_sender_type = sender_type<async_rw_mutex_access_type::read>;
-        using readwrite_sender_type = sender_type<async_rw_mutex_access_type::readwrite>;
-
-        using allocator_type = Allocator;
-
-        explicit async_rw_mutex(allocator_type const& alloc = {})
-          : alloc(alloc)
+        explicit async_rw_mutex(allocator_type alloc = {})
+          : base_type(std::move(alloc))
         {
         }
         async_rw_mutex(async_rw_mutex&&) noexcept = default;
@@ -609,50 +667,14 @@ namespace pika::execution::experimental {
         async_rw_mutex(async_rw_mutex const&) = delete;
         async_rw_mutex& operator=(async_rw_mutex const&) = delete;
 
-        read_sender_type read()
-        {
-            if (prev_access == async_rw_mutex_access_type::readwrite)
-            {
-                auto prev_state = std::move(state);
-                state = std::allocate_shared<shared_state_type, allocator_type>(alloc);
-                prev_access = async_rw_mutex_access_type::read;
-
-                // Only the first access has no previous shared state. When
-                // there is a previous state we set the next state so that the
-                // value can be passed from the previous state to the next
-                // state.
-                if (PIKA_LIKELY(prev_state)) { prev_state->set_next_state(state); }
-                else { state->done(); }
-            }
-
-            return read_sender_type{state};
-        }
-
-        readwrite_sender_type readwrite()
-        {
-            auto prev_state = std::move(state);
-            state = std::allocate_shared<shared_state_type, allocator_type>(alloc);
-            prev_access = async_rw_mutex_access_type::readwrite;
-
-            // Only the first access has no previous shared state. When there is
-            // a previous state we set the next state so that the value can be
-            // passed from the previous state to the next state.
-            if (PIKA_LIKELY(prev_state)) { prev_state->set_next_state(state); }
-            else { state->done(); }
-
-            return readwrite_sender_type{state};
-        }
-
-    private:
-        PIKA_NO_UNIQUE_ADDRESS allocator_type alloc;
-
-        async_rw_mutex_access_type prev_access = async_rw_mutex_access_type::readwrite;
-
-        shared_state_ptr_type state;
+        read_sender_type read() { return base_type::read(); }
+        readwrite_sender_type readwrite() { return base_type::readwrite(); }
     };
 
     template <typename ReadWriteT, typename ReadT, typename Allocator>
     class async_rw_mutex
+      : public detail::async_rw_mutex_base<std::decay_t<ReadWriteT>, std::decay_t<ReadT> const,
+            Allocator>
     {
     private:
         static_assert(!std::is_void<ReadWriteT>::value,
@@ -662,47 +684,57 @@ namespace pika::execution::experimental {
             "Cannot mix void and non-void type in async_rw_mutex (ReadT is void, ReadWriteT is "
             "non-void)");
 
+        using base_type = detail::async_rw_mutex_base<std::decay_t<ReadWriteT>,
+            std::decay_t<ReadT> const, Allocator>;
+        using shared_state_type = typename base_type::shared_state_type;
+        using shared_state_ptr_type = typename base_type::shared_state_ptr_type;
         template <async_rw_mutex_access_type AccessType>
-        using sender_type = detail::async_rw_mutex_sender<std::decay_t<ReadWriteT>,
-            std::decay_t<ReadT> const, AccessType>;
+        using sender_type = typename base_type::sender_type<AccessType>;
+
+        using base_type::alloc;
 
     public:
         /// \brief The type of read-only types accessed through the mutex.
-        using read_type = std::decay_t<ReadT> const;
+        using read_type = typename base_type::read_type;
 
         /// \brief The type of read-write types accessed through the mutex.
-        using readwrite_type = std::decay_t<ReadWriteT>;
+        using readwrite_type = typename base_type::readwrite_type;
 
         /// \brief The wrapper type sent by read-only-access senders.
-        using read_access_type = async_rw_mutex_access_wrapper<readwrite_type, read_type,
-            async_rw_mutex_access_type::read>;
+        using read_access_type = typename base_type::read_access_type;
 
         /// \brief The wrapper type sent by read-write-access senders.
-        using readwrite_access_type = async_rw_mutex_access_wrapper<readwrite_type, read_type,
-            async_rw_mutex_access_type::readwrite>;
+        using readwrite_access_type = typename base_type::readwrite_access_type;
 
         /// \brief The type of read-only-access senders.
-        using read_sender_type = sender_type<async_rw_mutex_access_type::read>;
+        using read_sender_type = typename base_type::read_sender_type;
 
         /// \brief The type of read-write-access senders.
-        using readwrite_sender_type = sender_type<async_rw_mutex_access_type::readwrite>;
+        using readwrite_sender_type = typename base_type::readwrite_sender_type;
 
-        using allocator_type = Allocator;
+        using allocator_type = typename base_type::allocator_type;
 
+    private:
+        using value_ptr_type = std::shared_ptr<readwrite_type>;
+        value_ptr_type value;
+
+    public:
         async_rw_mutex() = delete;
 
         /// \brief Construct a new mutex with the wrapped value initialized to \p u.
         template <typename U,
             typename = std::enable_if_t<!std::is_same<std::decay_t<U>, async_rw_mutex>::value>>
-        explicit async_rw_mutex(U&& u, allocator_type const& alloc = {})
-          : value(std::allocate_shared<readwrite_type, allocator_type>(alloc, std::forward<U>(u)))
-          , alloc(alloc)
+        explicit async_rw_mutex(U&& u, allocator_type alloc = {})
+          : base_type(std::move(alloc))
+          , value(std::allocate_shared<readwrite_type, allocator_type>(
+                this->alloc, std::forward<U>(u)))
         {
         }
         async_rw_mutex(async_rw_mutex&&) noexcept = default;
         async_rw_mutex& operator=(async_rw_mutex&&) noexcept = default;
         async_rw_mutex(async_rw_mutex const&) = delete;
         async_rw_mutex& operator=(async_rw_mutex const&) = delete;
+
         /// \brief Destroy the mutex.
         ///
         /// The destructor does not wait or require that all accesses through senders have
@@ -712,55 +744,9 @@ namespace pika::execution::experimental {
         ~async_rw_mutex() = default;
 
         /// \brief Access the wrapped value in read-only mode through a sender.
-        read_sender_type read()
-        {
-            if (prev_access == async_rw_mutex_access_type::readwrite)
-            {
-                auto prev_state = std::move(state);
-                state = std::allocate_shared<shared_state_type, allocator_type>(alloc);
-                state->set_value(value);
-                prev_access = async_rw_mutex_access_type::read;
-
-                // Only the first access has no previous shared state.
-                if (PIKA_LIKELY(prev_state)) { prev_state->set_next_state(state); }
-                else { state->done(); }
-            }
-
-            return read_sender_type{state};
-        }
+        read_sender_type read() { return base_type::read(value); }
 
         /// \brief Access the wrapped value in read-write mode through a sender.
-        readwrite_sender_type readwrite()
-        {
-            auto prev_state = std::move(state);
-            state = std::allocate_shared<shared_state_type, allocator_type>(alloc);
-            state->set_value(value);
-            prev_access = async_rw_mutex_access_type::readwrite;
-
-            // Only the first access has no previous shared state.
-            if (PIKA_LIKELY(prev_state)) { prev_state->set_next_state(state); }
-            else { state->done(); }
-
-            return readwrite_sender_type{state};
-        }
-
-    private:
-        using shared_state_type = detail::async_rw_mutex_shared_state<readwrite_type>;
-        using shared_state_weak_ptr_type = std::weak_ptr<shared_state_type>;
-        using value_ptr_type = std::shared_ptr<readwrite_type>;
-
-        // nvc++ is not able to see this typedef unless it's public
-#if defined(PIKA_NVHPC_VERSION)
-    public:
-#endif
-        using shared_state_ptr_type = std::shared_ptr<shared_state_type>;
-
-    private:
-        value_ptr_type value;
-        PIKA_NO_UNIQUE_ADDRESS allocator_type alloc;
-
-        async_rw_mutex_access_type prev_access = async_rw_mutex_access_type::readwrite;
-
-        shared_state_ptr_type state;
+        readwrite_sender_type readwrite() { return base_type::readwrite(value); }
     };
 }    // namespace pika::execution::experimental
