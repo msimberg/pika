@@ -329,9 +329,8 @@ namespace pika::async_rw_mutex_detail {
 
             if (!os.state->add_op_state(&os))
             {
-                // There is no previous state on the first access or the
-                // previous state has already been released. We can run
-                // the continuation immediately.
+                // The previous shared state has already been released. We can run the continuation
+                // immediately.
                 os.continuation();
             }
         }
