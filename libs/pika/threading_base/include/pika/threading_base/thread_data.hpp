@@ -525,11 +525,7 @@ namespace pika::threads::detail {
 
         bool requested_interrupt_;
         bool enabled_interrupt_;
-        bool ran_exit_funcs_;
         bool const is_stackless_;
-
-        // Singly linked list (heap-allocated)
-        std::forward_list<util::detail::function<void()>> exit_funcs_;
 
         // reference to scheduler which created/manages this thread
         scheduler_base* scheduler_base_;

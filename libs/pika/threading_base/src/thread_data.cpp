@@ -49,7 +49,6 @@ namespace pika::threads::detail {
       , priority_(init_data.priority)
       , requested_interrupt_(false)
       , enabled_interrupt_(true)
-      , ran_exit_funcs_(false)
       , is_stackless_(is_stackless)
       , scheduler_base_(init_data.scheduler_base)
       , last_worker_thread_num_(std::size_t(-1))
@@ -82,7 +81,6 @@ namespace pika::threads::detail {
     thread_data::~thread_data()
     {
         PIKA_LOG(debug, "thread_data::~thread_data({})", fmt::ptr(this));
-        free_thread_exit_callbacks();
     }
 
     void thread_data::destroy_thread()
@@ -91,45 +89,6 @@ namespace pika::threads::detail {
             fmt::ptr(this), this->get_description(), this->get_thread_phase());
 
         get_scheduler_base()->destroy_thread(this);
-    }
-
-    void thread_data::run_thread_exit_callbacks()
-    {
-        std::unique_lock<pika::detail::spinlock> l(spinlock_pool::spinlock_for(this));
-
-        while (!exit_funcs_.empty())
-        {
-            {
-                pika::detail::unlock_guard<std::unique_lock<pika::detail::spinlock>> ul(l);
-                if (!exit_funcs_.front().empty()) exit_funcs_.front()();
-            }
-            exit_funcs_.pop_front();
-        }
-        ran_exit_funcs_ = true;
-    }
-
-    bool thread_data::add_thread_exit_callback(util::detail::function<void()> const& f)
-    {
-        std::lock_guard<pika::detail::spinlock> l(spinlock_pool::spinlock_for(this));
-
-        if (ran_exit_funcs_ || get_state().state() == thread_schedule_state::terminated)
-        {
-            return false;
-        }
-
-        exit_funcs_.push_front(f);
-
-        return true;
-    }
-
-    void thread_data::free_thread_exit_callbacks()
-    {
-        std::lock_guard<pika::detail::spinlock> l(spinlock_pool::spinlock_for(this));
-
-        // Exit functions should have been executed.
-        PIKA_ASSERT(exit_funcs_.empty() || ran_exit_funcs_);
-
-        exit_funcs_.clear();
     }
 
     bool thread_data::interruption_point(bool throw_on_interrupt)
@@ -163,8 +122,6 @@ namespace pika::threads::detail {
         PIKA_LOG(debug, "thread_data::rebind_base({}), description({}), phase({}), rebind",
             fmt::ptr(this), get_description(), get_thread_phase());
 
-        free_thread_exit_callbacks();
-
         current_state_.store(thread_state(init_data.initial_state, thread_restart_state::signaled));
 
 #ifdef PIKA_HAVE_THREAD_DESCRIPTION
@@ -184,8 +141,6 @@ namespace pika::threads::detail {
         priority_ = init_data.priority;
         requested_interrupt_ = false;
         enabled_interrupt_ = true;
-        ran_exit_funcs_ = false;
-        exit_funcs_.clear();
         scheduler_base_ = init_data.scheduler_base;
         last_worker_thread_num_.store(std::size_t(-1), std::memory_order_relaxed);
 
